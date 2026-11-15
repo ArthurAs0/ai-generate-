@@ -1,0 +1,2004 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qwen Create Studio</title>
+<meta name="description" content="Material 3 Expressive design prototype of the Create workspace of an AI video app. Nothing is generated.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wdth,wght@8..144,100..112,400..900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+/* Theme and sidebar state before first paint, shared with Home (home.html) */
+(function () {
+  var d = document.documentElement, g = function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  var t = g('qc_studio_theme'); if (t === 'light' || t === 'dark') d.dataset.theme = t;
+  d.dataset.sidebar = g('qc_home_sidebar') === '"collapsed"' ? 'collapsed' : 'expanded';
+  d.dataset.rail = String(innerWidth >= 720 && (d.dataset.sidebar === 'collapsed' || innerWidth < 1180));
+})();
+</script>
+<style>
+/* =============================================================================
+   QWEN CREATE · CREATE WORKSPACE  (Material 3 Expressive design prototype)
+   Layout: a navigation rail, a control panel (prompt + settings + Create) and a canvas.
+   The canvas shows how it works with a real example: idea → storyboard → video.
+   ========================================================================== */
+
+/* ---- 1. TOKENS --------------------------------------------------------------- */
+:root {
+  --font: "Roboto Flex", Roboto, "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* M3 Expressive motion: spatial springs overshoot, effects springs do not */
+  --sp-fast: cubic-bezier(.42, 1.67, .21, .9);   --d-sp-fast: 350ms;
+  --sp:      cubic-bezier(.38, 1.21, .22, 1);    --d-sp: 500ms;
+  --sp-slow: cubic-bezier(.39, 1.29, .35, .98);  --d-sp-slow: 650ms;
+  --fx:      cubic-bezier(.34, .8, .34, 1);      --d-fx: 200ms;
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 28px; --r-2xl: 36px; --r-full: 999px;
+
+  /* "Aquatic Harmony" palette from index.html: deep #004040 · dark #006060 · teal #008080 · bright #00A0A0 · light #00C0C0 */
+  /* light scheme */
+  color-scheme: light;
+  --bg: #F5F8F8; --s1: #FFFFFF; --s2: #F0F4F4; --s3: #E9F0F0; --s4: #E0E7E7;
+  --on: #122121; --on-v: #5E6F6F; --outline: #8FA0A0; --outline-v: #E0E7E7;
+  --pri: #008080; --on-pri: #FFFFFF; --err: #C4353B; --inv-pri: #7FD6D6;
+  --sec-c: #CCE8E7; --on-sec-c: #051F1F;
+  --ter: #008080; --on-ter: #FFFFFF; --ter-c: #E5F3F3; --on-ter-c: #006060;
+  --inv: #122121; --on-inv: #FFFFFF;
+  --menu: #FFFFFF; --shadow: rgba(18, 33, 33, .14);
+  --avatar: linear-gradient(135deg, #006060, #00A0A0);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #061212; --s1: #0B1C1C; --s2: #112626; --s3: #142C2C; --s4: #1C3434;
+  --on: #E4EEEE; --on-v: #8BA3A3; --outline: #5F7979; --outline-v: #1C3434;
+  --pri: #00C0C0; --on-pri: #002A2A; --err: #FF8A80; --inv-pri: #006A6A;
+  --sec-c: #324B4A; --on-sec-c: #CCE8E7;
+  --ter: #00C0C0; --on-ter: #002A2A; --ter-c: #004040; --on-ter-c: #00C0C0;
+  --inv: #E4EEEE; --on-inv: #0B1C1C;
+  --menu: #112626; --shadow: rgba(0, 0, 0, .5);
+  --avatar: linear-gradient(135deg, #00A0A0, #00C0C0);
+}
+
+/* ---- 2. BASE ----------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--on); font: 400 15px/1.5 var(--font); -webkit-font-smoothing: antialiased; transition: background-color .3s; overflow-x: hidden; }
+button, input, textarea { font: inherit; color: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 2px solid var(--ter); outline-offset: 2px; }
+::selection { background: var(--ter-c); color: var(--on-ter-c); }
+.i { width: var(--s, 20px); height: var(--s, 20px); fill: currentColor; flex: none; display: block; }
+.tnum { font-variant-numeric: tabular-nums; }
+.grow { flex: 1; min-width: 0; }
+.row { display: flex; align-items: center; gap: 8px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.scroll-x { overflow-x: auto; scrollbar-width: none; }
+.scroll-x::-webkit-scrollbar { display: none; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--s4); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
+
+/* ---- 3. WORKSPACE LAYOUT ----------------------------------------------------- */
+.ws { --sb-w: 272px; display: grid; grid-template-columns: var(--sb-w) minmax(0, 1fr); height: 100vh; height: 100dvh; transition: grid-template-columns .3s ease-in-out; }
+:root[data-rail="true"] .ws { --sb-w: 72px; }
+.ws-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.topbar { height: 64px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 16px 0 20px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: -.02em; font-stretch: 110%; white-space: nowrap; }
+.brand-mark { width: 36px; height: 36px; position: relative; display: grid; place-items: center; color: var(--on-pri); flex: none; }
+.brand-mark svg.shape { position: absolute; inset: 0; width: 100%; height: 100%; fill: var(--pri); transition: transform var(--d-sp-slow) var(--sp-slow); }
+.brand:hover .brand-mark svg.shape { transform: rotate(40deg); }
+.brand-mark .i { position: relative; --s: 18px; }
+.crumb { color: var(--on-v); font-size: 14px; font-weight: 500; white-space: nowrap; }
+.crumb b { color: var(--on); font-weight: 650; }
+.ws-body { flex: 1; min-height: 0; display: flex; gap: 12px; padding: 0 12px 12px; }
+.topbar .brand { display: none; }   /* the brand sits in the sidebar; shown here only on phones */
+
+/* Sidebar: the same floating sidebar as Home (home.html), drawn with Home's own colours,
+   icons and font so moving between the pages feels like one app. 272px expanded / 72px rail
+   (collapsed, or narrower than 1180px); a bottom tab bar on phones. Its collapsed state, theme,
+   announcement and the new-user preview are shared with Home through localStorage. */
+.sidebar {
+  --surface-2: #171c1d; --surface-3: #1e2426; --line: rgba(255, 255, 255, .07); --line-2: rgba(255, 255, 255, .12);
+  --text: #edf1f1; --text-2: #a7b1b3; --text-3: #858f92;
+  --accent: #3ecfc0; --accent-ink: #032220; --accent-soft: rgba(62, 207, 192, .1);
+  --bm-bg: #14302d; --bm-fg: #3ecfc0;
+  --sb-bg: #111516; --sb-border: rgba(255, 255, 255, .08); --sb-field: #1b2123;
+  --sb-shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 2px 6px rgba(0, 0, 0, .25), 0 28px 56px -28px rgba(0, 0, 0, .85);
+  --sel-2: #2bb3a5; --sel-shadow: 0 1px 0 rgba(255, 255, 255, .3) inset, 0 0 0 1px rgba(62, 207, 192, .5), 0 6px 16px -6px rgba(62, 207, 192, .55);
+}
+:root[data-theme="light"] .sidebar {
+  --surface-2: #f6f7f7; --surface-3: #eceff0; --line: rgba(12, 22, 24, .08); --line-2: rgba(12, 22, 24, .14);
+  --text: #0f1415; --text-2: #4c585b; --text-3: #687377;
+  --accent: #0d8a80; --accent-ink: #ffffff; --accent-soft: rgba(13, 138, 128, .08);
+  --bm-bg: #dff3f1; --bm-fg: #0d8a80;
+  --sb-bg: #fafbfb; --sb-border: #ffffff; --sb-field: #eef0f1;
+  --sb-shadow: 0 0 0 1px rgba(12, 22, 24, .05), 0 1px 2px rgba(12, 22, 24, .05), 0 18px 40px -18px rgba(12, 22, 24, .22);
+  --sel-2: #0a6f67; --sel-shadow: 0 1px 0 rgba(255, 255, 255, .25) inset, 0 0 0 1px #0a6f67, 0 6px 16px -6px rgba(13, 138, 128, .5);
+}
+.sidebar { position: sticky; top: 12px; z-index: 40; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; height: calc(100vh - 24px); height: calc(100dvh - 24px); margin: 12px 0 12px 12px; padding: 12px; overflow: hidden auto; scrollbar-width: none; border-radius: 24px; border: 1px solid var(--sb-border); background: var(--sb-bg); box-shadow: var(--sb-shadow); color: var(--text); font: 400 14px/1.5 "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; transition: padding .3s ease-in-out; }
+.sidebar::-webkit-scrollbar { display: none; }
+.sidebar ul { margin: 0; padding: 0; list-style: none; }
+.sidebar p, .sidebar strong { margin: 0; }
+.sidebar a { color: inherit; text-decoration: none; }
+.sidebar button { padding: 0; border: 0; background: none; cursor: pointer; }
+.sidebar :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.si { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+:root[data-rail="true"] .sidebar { padding: 12px 11px; }
+@media (max-height: 719px) { .sidebar .sb-announce { display: none; } }
+.sb-scroll { display: flex; flex-direction: column; gap: 12px; flex: none; margin: -8px; padding: 8px; }
+.sb-bottom { display: flex; flex-direction: column; gap: 12px; flex: none; }
+.sb-c { display: flex; align-items: center; min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; transition: max-width .3s ease-in-out, opacity .3s ease-in-out, filter .3s ease-in-out; }
+:root[data-rail="true"] .sb-c { max-width: 0; opacity: 0; filter: blur(3px); }
+.sb-in { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sb-ib { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; color: var(--text-2); flex: none; transition: background-color .15s, color .15s; }
+.sidebar .sb-ib:hover { background: var(--surface-3); color: var(--text); }
+.sb-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; transition: gap .3s ease-in-out; }
+:root[data-rail="true"] .sb-head { flex-direction: column-reverse; align-items: flex-start; gap: 10px; }
+.sb-brand { display: flex; align-items: center; gap: 10px; min-width: 0; border-radius: 12px; }
+.sb-mark { width: 36px; height: 36px; flex: none; }
+.sb-mark .bm-bg { fill: var(--bm-bg); } .sb-mark .bm-fg { fill: var(--bm-fg); }
+.sb-name { font-weight: 600; font-size: 15px; letter-spacing: -.015em; }
+.sb-toggle { display: none; width: 36px; height: 36px; border-radius: 12px; color: var(--text-3); }
+.sb-toggle .si { transform: scaleX(-1); transition: transform .3s ease-in-out; }
+:root[data-sidebar="collapsed"] .sb-toggle .si { transform: none; }
+@media (min-width: 1180px) { .sidebar .sb-toggle { display: inline-grid; } }
+.sb-nav ul { display: flex; flex-direction: column; gap: 4px; }
+.sb-nav-main ul { padding: 0 2px; transition: padding .3s ease-in-out; }
+:root[data-rail="true"] .sb-nav-main ul { padding: 0; }
+.sb-nav a, .sb-nav button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; height: 36px; padding: 8px; border-radius: 12px; overflow: hidden; color: var(--text-2); font-size: 14px; font-weight: 500; transition: width .3s ease-in-out, background-color .15s, color .15s; }
+:root[data-rail="true"] .sb-nav a, :root[data-rail="true"] .sb-nav button { width: 36px; }
+.sb-nav a:hover, .sb-nav button:hover { background: var(--surface-3); color: var(--text); }
+.sb-nav .si { color: var(--text-3); transition: color .15s; }
+.sb-nav a:hover .si, .sb-nav button:hover .si { color: var(--text-2); }
+.sb-nav a[aria-current="page"] { background: linear-gradient(to bottom, var(--accent), var(--sel-2)); color: var(--accent-ink); box-shadow: var(--sel-shadow); }
+.sb-nav a[aria-current="page"] .si { color: var(--accent-ink); }
+.sb-badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--surface-3); color: var(--text-2); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sb-badge:empty { display: none; }
+.sb-announce { position: relative; display: grid; gap: 4px; padding: 12px; border-radius: 16px; border: 1px solid var(--line); background: radial-gradient(120% 90% at 100% 0%, var(--accent-soft), transparent 60%), var(--surface-2); animation: sb-fade .25s ease-out .25s both; }
+@keyframes sb-fade { from { opacity: 0; } }
+.sb-announce-ic { display: grid; place-items: center; width: 28px; height: 28px; margin-bottom: 4px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); }
+.sb-announce-ic .si { width: 16px; height: 16px; }
+.sb-announce strong { font-size: 13px; font-weight: 600; }
+.sb-announce p { font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
+.sidebar .sb-announce-cta { justify-self: start; margin-top: 6px; font-size: 12.5px; font-weight: 600; color: var(--accent); }
+.sb-announce-cta:hover { text-decoration: underline; }
+.sidebar .sb-announce-x { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 8px; }
+.sb-announce-x .si { width: 14px; height: 14px; }
+:root[data-rail="true"] .sb-announce { display: none; }
+.sb-theme { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 3px; border-radius: 999px; background: var(--sb-field); }
+.sb-theme label { position: relative; display: flex; align-items: center; justify-content: center; gap: 6px; height: 30px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--text-2); cursor: pointer; transition: background-color .15s, color .15s, box-shadow .15s; }
+.sb-theme label .si { width: 16px; height: 16px; }
+.sb-theme input { position: absolute; opacity: 0; pointer-events: none; }
+.sb-theme label:has(input:checked) { background: var(--sb-bg); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .18), 0 0 0 1px var(--line); }
+.sb-theme label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sidebar .sb-theme-btn { display: none; width: 36px; height: 36px; border-radius: 999px; background: var(--sb-field); }
+:root[data-rail="true"] .sb-theme { display: none; }
+:root[data-rail="true"] .sidebar .sb-theme-btn { display: inline-grid; }
+.sb-foot { display: grid; gap: 8px; }
+.sb-me { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 7px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface-2); transition: padding .3s ease-in-out, background-color .3s, border-color .3s; }
+:root[data-rail="true"] .sb-me { padding: 1px; background: transparent; border-color: transparent; }
+.sb-avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex: none; font-size: 13px; font-weight: 600; color: var(--accent-ink); background: var(--accent); }
+.sb-me-text { display: grid; min-width: 0; line-height: 1.3; }
+.sb-me-name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.sb-me-plan { font-size: 12px; color: var(--text-3); }
+.sb-proto { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 12px; border: 1px dashed var(--line-2); font-size: 12px; color: var(--text-2); cursor: pointer; white-space: nowrap; }
+:root[data-rail="true"] .sb-proto { display: none; }
+.sb-switch { appearance: none; -webkit-appearance: none; position: relative; width: 36px; height: 20px; margin: 0; flex: none; border-radius: 999px; background: var(--surface-3); border: 1px solid var(--line-2); cursor: pointer; transition: background-color .2s, border-color .2s; }
+.sb-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--text-2); transition: transform .22s cubic-bezier(.2, .8, .2, 1), background-color .2s; }
+.sb-switch:checked { background: var(--accent); border-color: var(--accent); }
+.sb-switch:checked::after { transform: translateX(16px); background: var(--accent-ink); }
+
+/* Control panel */
+.panel { width: 400px; flex: none; display: flex; flex-direction: column; background: var(--s1); border-radius: var(--r-xl); overflow: hidden; box-shadow: 0 0 0 1px var(--outline-v); }
+.panel-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 18px 8px; scrollbar-width: thin; }
+.panel-foot { flex: none; padding: 14px 18px 18px; border-top: 1px solid var(--outline-v); background: var(--s1); }
+.p-label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--on-v); margin: 0 4px 8px; }
+.p-label .i { --s: 15px; color: var(--ter); }
+.p-label .grow { text-align: right; text-transform: none; letter-spacing: 0; font-weight: 500; }
+/* Your idea: the AI-Input design from Uiverse.io (by AshtonLiou), in the page's colors.
+   A glowing input box. */
+.ai { position: relative; display: flex; flex-direction: column; align-items: center; isolation: isolate; }
+.ai-box { position: relative; width: 100%; background: var(--s2); border: 2px solid color-mix(in srgb, var(--on) 10%, transparent); border-radius: 18px; overflow: hidden; z-index: 0;
+  transition: border-color .3s, transform .2s; }
+.ai-box::before { content: ""; position: absolute; top: -9rem; left: -6rem; width: 15rem; height: 15rem; border-radius: 50%; pointer-events: none; z-index: -1; opacity: .55; filter: blur(10px);
+  background: radial-gradient(circle, color-mix(in srgb, var(--pri) 60%, #fff) 10%, color-mix(in srgb, var(--pri) 25%, transparent) 25%, transparent 70%);
+  transition: all 1s cubic-bezier(.3, 1.5, .6, 1); }
+.ai-box:focus-within::before { top: -6rem; left: 50%; filter: blur(50px); }
+.ai-box:focus-within { border-color: color-mix(in srgb, var(--pri) 55%, transparent); }
+.ai-wrap { display: flex; flex-direction: column; padding: 12px 12px 10px; }
+/* The idea is a rich editor (contenteditable) so it can hold inline @image chips */
+.ai-ed { display: block; width: 100%; min-height: 130px; max-height: 300px; overflow-y: auto; padding: 4px; color: var(--on); font: 400 16px/1.55 var(--font); outline: none; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; scrollbar-width: thin; }
+/* Animated placeholder: while the box is empty, ideas type themselves out (as in Home's "How it works") */
+.ai-wrap { position: relative; }
+.ai-ph { position: absolute; top: 16px; left: 16px; right: 16px; color: var(--on-v); opacity: .85; font: 400 16px/1.55 var(--font); white-space: pre-wrap; overflow-wrap: anywhere; pointer-events: none; transition: opacity .45s ease; }
+.ai-ph[hidden] { display: none; }
+.ai-ph.fade { opacity: 0; }
+.ai-ph .tw-caret { display: none; width: 2px; height: 1.15em; margin-left: 2px; vertical-align: -.2em; border-radius: 1px; background: var(--pri); }
+.ai-ph.on .tw-caret { display: inline-block; animation: tw-blink 1s steps(1) infinite; }
+.ai-ph.typing .tw-caret { animation: none; }   /* solid while typing, blinks while it holds */
+.ai-box:focus-within .ai-ph .tw-caret { display: none; }   /* the real caret is there */
+@keyframes tw-blink { 50% { opacity: 0; } }
+.ai-ed[contenteditable="false"] { opacity: .6; cursor: default; }
+.ai-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+.ai-left, .ai-right { display: flex; align-items: center; gap: 6px; }
+.ai-btn { width: 38px; height: 38px; padding: 0; border: 2px solid color-mix(in srgb, var(--on) 6%, transparent); border-radius: 50%; background: transparent; color: var(--on-v);
+  display: grid; place-items: center; cursor: pointer; transition: all .2s ease-in-out, transform .1s ease-in-out; }
+.ai-btn:hover { color: var(--on); box-shadow: .2rem .2rem .5rem .2rem rgba(0, 0, 0, .15); }
+.ai-btn:active { transform: scale(.9); }
+.ai-btn svg { width: 18px; height: 18px; fill: currentColor; }
+.ai-count { font-size: 11px; color: var(--on-v); margin-right: 2px; }
+.ai-send { width: 40px; height: 40px; padding: 0; border: 0; background: none; color: var(--pri); cursor: pointer; display: grid; place-items: center; transition: transform .2s ease-in-out; }
+.ai-send svg { width: 34px; height: 34px; fill: currentColor; }
+.ai-send:hover:not(:disabled) { transform: translateY(-10%) scale(1.1); }
+.ai-send:disabled { opacity: .4; cursor: default; }
+.text-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; margin-left: -10px; border: 0; border-radius: var(--r-full); background: none; color: var(--ter); font-weight: 650; font-size: 13px; cursor: pointer; transition: background-color var(--d-fx), transform var(--d-sp-fast) var(--sp-fast); }
+.text-btn:hover { background: color-mix(in srgb, var(--ter) 10%, transparent); }
+.text-btn:active { transform: scale(.96); }
+.text-btn .i { --s: 16px; }
+.p-sec { margin-top: 22px; }
+.p-note { font-size: 12px; color: var(--on-v); margin: 8px 6px 0; }
+.p-note .ter { color: var(--ter); }
+/* Settings as a grouped list of rows */
+.set-list { display: flex; flex-direction: column; gap: 3px; }
+.set-row { width: 100%; min-height: 62px; display: flex; align-items: center; gap: 12px; padding: 8px 12px 8px 14px; border: 0; border-radius: 8px; background: var(--s2); color: var(--on); text-align: left; cursor: pointer;
+  transition: border-radius var(--d-sp-fast) var(--sp-fast), background-color var(--d-fx), color var(--d-fx), transform var(--d-sp-fast) var(--sp-fast); }
+.set-row:first-child { border-radius: 22px 22px 8px 8px; }
+.set-row:last-child { border-radius: 8px 8px 22px 22px; }
+.set-row:hover { background: var(--s3); }
+.set-row:active:not(:disabled) { transform: scale(.98); }
+.set-row:disabled { opacity: .5; cursor: default; }
+.set-row .lead { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; background: var(--s1); color: var(--on-v); flex: none; }
+.set-row.custom .lead { color: var(--on); }
+.set-row .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.set-row .k { font-size: 12px; color: var(--on-v); }
+.set-row .v { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-row .tag { height: 24px; padding: 0 9px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; flex: none; }
+.set-row.auto .tag { background: var(--ter-c); color: var(--on-ter-c); }
+.set-row.custom .tag { box-shadow: inset 0 0 0 1px var(--outline); color: var(--on-v); }
+.set-row .chev { color: var(--on-v); display: grid; transition: transform var(--d-sp) var(--sp); }
+.set-row.open { background: var(--pri); color: var(--on-pri); border-radius: 22px; }
+.set-row.open .k, .set-row.open .chev { color: inherit; opacity: .85; }
+.set-row.open .lead { background: color-mix(in srgb, var(--on-pri) 15%, transparent); color: inherit; }
+.set-row.open .tag { background: color-mix(in srgb, var(--on-pri) 18%, transparent); color: inherit; box-shadow: none; }
+.set-row.open .chev { transform: translateX(3px); }
+.set-row .bump { display: inline-block; animation: bump var(--d-sp) var(--sp); }
+/* Audio switch row (M3 switch with a check in the handle) */
+.set-row.toggle .v { font-size: 14px; font-weight: 600; }
+.set-row.toggle.is-on .lead { color: var(--ter); }
+.switch { position: relative; width: 52px; height: 32px; border-radius: 16px; flex: none; background: var(--s4); box-shadow: inset 0 0 0 2px var(--outline); transition: background-color var(--d-fx), box-shadow var(--d-fx); }
+.switch .knob { position: absolute; left: 8px; top: 8px; width: 16px; height: 16px; border-radius: 50%; background: var(--outline); display: grid; place-items: center; color: var(--pri);
+  transition: left var(--d-sp) var(--sp), top var(--d-sp) var(--sp), width var(--d-sp) var(--sp), height var(--d-sp) var(--sp), background-color var(--d-fx); }
+.switch.on { background: var(--pri); box-shadow: none; }
+.switch.on .knob { left: 24px; top: 4px; width: 24px; height: 24px; background: var(--on-pri); }
+.set-row.toggle:active .switch .knob { width: 28px; height: 28px; top: 2px; left: 2px; }
+.set-row.toggle:active .switch.on .knob { left: 22px; }
+
+/* Reference images: a file upload block, rebuilt from Aceternity UI's FileUpload (React) in plain CSS/JS */
+.fu { position: relative; display: block; width: 100%; padding: 22px 16px 18px; border: 1.5px dashed var(--outline-v); border-radius: 22px; background: var(--s1); overflow: hidden; cursor: pointer; text-align: center; outline: none;
+  transition: border-color var(--d-fx), background-color var(--d-fx); }
+.fu:hover { border-color: var(--outline); }
+.fu:focus-visible { box-shadow: 0 0 0 2px var(--ter); }
+.fu.disabled { opacity: .5; pointer-events: none; }
+.fu.full { cursor: default; }
+.fu-inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
+.fu-title { margin: 0; display: flex; align-items: center; gap: 8px; font-weight: 750; font-size: 15px; color: var(--on); }
+.fu-title .pill { font-size: 11px; font-weight: 650; color: var(--on-v); padding: 2px 8px; border-radius: 10px; background: var(--s2); box-shadow: 0 0 0 1px var(--outline-v); }
+.fu-sub { margin: 4px 0 0; max-width: 280px; font-size: 13px; line-height: 1.45; color: var(--on-v); }
+.fu-hint { margin: 16px 0 0; font-size: 11.5px; color: var(--on-v); opacity: .8; }
+/* The floating upload card: slides up-right on hover and reveals a dashed outline behind it */
+.fu-stage { position: relative; width: 112px; height: 92px; margin-top: 20px; }
+.fu-card { position: absolute; inset: 0; z-index: 2; border-radius: 12px; background: var(--s2); color: var(--on-v); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  box-shadow: 0 10px 30px -8px var(--shadow), 0 0 0 1px var(--outline-v); transition: transform 450ms var(--sp), color var(--d-fx), opacity var(--d-fx); }
+.fu-outline { position: absolute; inset: 0; z-index: 1; border-radius: 12px; border: 1.5px dashed var(--pri); opacity: 0; transition: opacity var(--d-fx); }
+.fu:not(.full):hover .fu-card { transform: translate(16px, -16px); opacity: .92; }
+.fu:not(.full):hover .fu-outline { opacity: 1; }
+.fu-card .drop-text { display: none; font-size: 13px; font-weight: 650; color: var(--on); }
+.fu.drag, .panel.drop-on .fu:not(.full) { border-color: var(--pri); background: color-mix(in srgb, var(--pri) 6%, var(--s1)); }
+.panel.drop-on .fu-card { transform: translate(16px, -16px); color: var(--pri); }
+.panel.drop-on .fu-card .drop-text { display: block; }
+.panel.drop-on .fu-outline { opacity: 1; }
+/* File cards */
+.fu-files { width: 100%; margin-top: 16px; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.fu-file { display: flex; gap: 12px; padding: 10px; border-radius: 14px; background: var(--s2); box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 0 0 1px var(--outline-v); }
+.fu-file.new { animation: fu-in 450ms var(--sp) both; }
+@keyframes fu-in { from { opacity: 0; transform: translateY(-10px) scale(.97); } }
+.fu-file img { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; flex: none; background: var(--s3); }
+.fu-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.fu-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--on-v); }
+.fu-name { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--on); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fu-size { flex: none; padding: 2px 8px; border-radius: 8px; background: var(--s1); box-shadow: 0 0 0 1px var(--outline-v); font-size: 11.5px; }
+.fu-type { padding: 1px 6px; border-radius: 6px; background: var(--s3); font-size: 11.5px; }
+.fu-x { width: 26px; height: 26px; flex: none; margin: -4px -4px -4px 0; border: 0; border-radius: 50%; display: grid; place-items: center; background: transparent; color: var(--on-v); cursor: pointer;
+  transition: background-color var(--d-fx), color var(--d-fx), transform var(--d-sp-fast) var(--sp-fast); }
+.fu-x:hover { background: color-mix(in srgb, var(--on) 10%, transparent); color: var(--on); }
+.fu-x:active { transform: scale(.9); }
+/* Each image card adds its @mention to the idea when clicked */
+.fu-file[data-ref-open] { cursor: pointer; transition: box-shadow var(--d-fx); }
+.fu-file[data-ref-open]:hover { box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 0 0 1.5px var(--pri); }
+.fu-file[data-ref-open]:focus-visible { outline: 2px solid var(--pri); outline-offset: 2px; }
+.fu-row .fu-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fu-row > span:last-child:not(.fu-size) { flex: none; }
+/* Inline @mention chips in the idea: thumbnail + name, backed by the image's id */
+.mention { display: inline-flex; align-items: center; gap: 4px; height: 1.45em; margin: 0 1px; padding: 0 7px 0 2px; vertical-align: -.32em; border-radius: 7px;
+  background: color-mix(in srgb, var(--pri) 15%, var(--s2)); color: color-mix(in srgb, var(--pri) 70%, var(--on)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pri) 35%, transparent);
+  font-size: .92em; font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer; user-select: all; -webkit-user-select: all; transition: box-shadow var(--d-fx); }
+.mention:hover { box-shadow: inset 0 0 0 1.5px var(--pri); }
+.mention img { width: 1.15em; height: 1.15em; flex: none; border-radius: 4px; object-fit: cover; }
+.mention-t::before { content: "@"; opacity: .65; }
+.mention .mention-warn { display: none; width: 1em; height: 1em; }
+.mention.broken { background: color-mix(in srgb, var(--err) 12%, var(--s2)); color: var(--err); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--err) 50%, transparent); }
+.mention.broken .mention-t { text-decoration: line-through; text-decoration-thickness: 1px; }
+.mention.broken .mention-warn { display: block; }
+.ai-warn { display: flex; align-items: center; gap: 6px; margin: 4px 4px 0; font-size: 12.5px; color: var(--err); }
+.ai-warn[hidden] { display: none; }
+.ai-warn .i { --s: 15px; }
+ /* @ menu: only the attached images */
+.mmenu { position: fixed; z-index: 90; width: 280px; max-width: calc(100vw - 24px); max-height: 320px; overflow: auto; padding: 6px; border-radius: var(--r-lg); background: var(--menu); box-shadow: 0 0 0 1px var(--outline-v), 0 16px 40px -12px var(--shadow); animation: menu-in .16s var(--fx); }
+.mmenu[hidden] { display: none; }
+.mm-head { padding: 6px 8px 4px; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--on-v); }
+.mm-opt { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 10px; cursor: pointer; }
+.mm-opt:hover, .mm-opt[aria-selected="true"] { background: var(--s3); }
+.mm-opt img { width: 38px; height: 38px; flex: none; border-radius: 8px; object-fit: cover; }
+.mm-t { display: grid; min-width: 0; line-height: 1.3; }
+.mm-t b { font-size: 13.5px; font-weight: 650; }
+.mm-t small { font-size: 12px; color: var(--on-v); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-empty { margin: 0; padding: 8px; font-size: 13px; color: var(--on-v); }
+.mm-add { display: flex; align-items: center; gap: 8px; width: 100%; height: 38px; margin-top: 4px; padding: 0 10px; border: 0; border-radius: 10px; background: none; color: var(--ter); font: 650 13px var(--font); cursor: pointer; }
+.mm-add:hover { background: color-mix(in srgb, var(--ter) 10%, transparent); }
+.mm-add .i { --s: 18px; }
+.mm-tip { margin: 4px 0 0; padding: 6px 8px 2px; border-top: 1px solid var(--outline-v); font-size: 11.5px; color: var(--on-v); }
+
+.est-row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--on-v); margin-bottom: 12px; }
+.est-row b { color: var(--on); font-weight: 650; }
+.panel-foot .create-btn { width: 100%; }
+
+/* Canvas */
+.canvas { flex: 1; min-width: 0; overflow-y: auto; border-radius: var(--r-xl); background-color: var(--bg); box-shadow: inset 0 0 0 1px var(--outline-v); container-type: inline-size; scrollbar-width: thin; }
+.canvas-in { max-width: 1180px; margin: 0 auto; padding: 40px 36px 48px; }
+
+/* ---- 4. COMPONENTS ----------------------------------------------------------- */
+/* State layer shared by everything pressable */
+.sl { position: relative; isolation: isolate; }
+.sl::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: currentColor; opacity: 0; pointer-events: none; transition: opacity 150ms var(--fx); z-index: -1; }
+.sl:hover::after { opacity: .08; }
+.sl:active::after { opacity: .12; }
+
+.btn { --h: 48px; height: var(--h); padding: 0 22px; border: 0; border-radius: var(--r-full); display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-weight: 650; font-size: 15px; cursor: pointer; white-space: nowrap; flex: none;
+  transition: border-radius var(--d-sp-fast) var(--sp-fast), transform var(--d-sp-fast) var(--sp-fast), background-color var(--d-fx) var(--fx), color var(--d-fx) var(--fx), opacity var(--d-fx); }
+.btn:active:not(:disabled) { transform: scale(.97); }
+.btn:disabled { cursor: default; }
+.btn.sm { --h: 40px; padding: 0 16px; font-size: 14px; }
+.btn.lg { --h: 56px; padding: 0 26px; font-size: 16px; border-radius: 20px; }
+.btn.xl { --h: 64px; padding: 0 30px; font-size: 17px; border-radius: 22px; }
+.btn .i { --s: 20px; }
+.btn-filled { background: var(--pri); color: var(--on-pri); }
+.btn-tonal { background: var(--sec-c); color: var(--on-sec-c); }
+.create-btn .i { transition: transform var(--d-sp) var(--sp); }
+.create-btn:hover .i { transform: translateX(3px); }
+.icon-btn { width: 40px; height: 40px; border: 0; border-radius: var(--r-full); display: grid; place-items: center; background: transparent; color: var(--on-v); cursor: pointer; flex: none;
+  transition: background-color var(--d-fx), color var(--d-fx), transform var(--d-sp-fast) var(--sp-fast); }
+.icon-btn:hover { color: var(--on); }
+.icon-btn:active { transform: scale(.92); }
+.icon-btn.sm { width: 32px; height: 32px; }
+.icon-btn.sm .i { --s: 18px; }
+.avatar { width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer; background: var(--avatar); color: var(--on-pri); font-weight: 800; font-size: 15px; display: grid; place-items: center; flex: none; transition: transform var(--d-sp-fast) var(--sp-fast); }
+.avatar:active { transform: scale(.92); }
+
+/* Chips */
+.chip { height: 36px; padding: 0 14px; border: 1px solid var(--outline-v); border-radius: var(--r-md); background: transparent; color: var(--on); display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 550; cursor: pointer; white-space: nowrap; flex: none;
+  transition: background-color var(--d-fx), border-color var(--d-fx), color var(--d-fx), transform var(--d-sp-fast) var(--sp-fast); }
+.chip:active { transform: scale(.96); }
+.chip .i { --s: 18px; color: var(--on-v); }
+.chip.sel { background: var(--sec-c); color: var(--on-sec-c); border-color: transparent; }
+.chip.sel .i { color: inherit; }
+.assist { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 10px; border-radius: var(--r-sm); background: var(--ter-c); color: var(--on-ter-c); font-size: 13px; font-weight: 650; white-space: nowrap; }
+.assist .i { --s: 16px; }
+
+@keyframes bump { from { transform: translateY(6px) scale(.9); opacity: .2; } }
+.ratio-g { display: inline-block; width: calc(var(--w) * 1.1px); height: calc(var(--h) * 1.1px); border: 2px solid currentColor; border-radius: 3px; }
+
+/* Shapes */
+.shape-badge { position: relative; display: grid; place-items: center; flex: none; width: var(--sz, 40px); height: var(--sz, 40px); color: var(--on-pri); font-weight: 800; }
+.shape-badge > svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: var(--fill, var(--pri)); }
+.shape-badge > span, .shape-badge > .i { position: relative; }
+
+/* Loading indicator: a shape that morphs (driven by JS) */
+.loader { display: inline-block; width: var(--sz, 24px); height: var(--sz, 24px); background: currentColor; flex: none; clip-path: circle(45%); }
+
+/* Snackbar */
+.snack { position: fixed; left: 50%; bottom: 28px; z-index: 80; display: flex; align-items: center; gap: 10px; min-height: 52px; max-width: min(560px, calc(100vw - 32px));
+  padding: 8px 8px 8px 18px; border-radius: var(--r-lg); background: var(--inv); color: var(--on-inv); box-shadow: 0 12px 40px -10px var(--shadow);
+  transform: translate(-50%, 24px) scale(.96); opacity: 0; pointer-events: none; transition: transform var(--d-sp) var(--sp), opacity var(--d-fx); font-weight: 500; font-size: 14px; }
+.snack.show { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+.snack .msg { flex: 1; }
+.snack-act { height: 36px; padding: 0 12px; border: 0; border-radius: var(--r-full); background: none; color: var(--inv-pri); font: 700 14px var(--font); cursor: pointer; }
+.snack-act:hover { background: color-mix(in srgb, var(--on-inv) 10%, transparent); }
+
+/* Menus: floating groups with gaps, selected item becomes a pill */
+.menu { position: fixed; z-index: 70; display: flex; flex-direction: column; gap: 3px; max-height: min(640px, 80vh); overflow: auto; padding: 4px; scrollbar-width: thin;
+  transform-origin: top center; animation: menu-in var(--d-sp-fast) var(--sp-fast); }
+.menu.up { transform-origin: bottom center; }
+.menu.side { transform-origin: left top; }
+@keyframes menu-in { from { opacity: 0; transform: scale(.92) translateY(-6px); } }
+.mgroup { background: var(--menu); border-radius: var(--r-sm); padding: 6px; box-shadow: 0 10px 30px -10px var(--shadow), 0 0 0 1px var(--outline-v); }
+.mgroup:first-child { border-top-left-radius: 24px; border-top-right-radius: 24px; }
+.mgroup:last-child { border-bottom-left-radius: 24px; border-bottom-right-radius: 24px; }
+.gh { display: flex; align-items: center; gap: 6px; padding: 8px 12px 6px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--on-v); }
+.gh .i { --s: 14px; color: var(--ter); }
+.gh.sub { padding-top: 10px; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.mi { width: 100%; min-height: 48px; display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 0; background: none; border-radius: var(--r-md); text-align: left; cursor: pointer; color: var(--on);
+  transition: border-radius var(--d-sp-fast) var(--sp-fast), background-color var(--d-fx); }
+.mi:hover, .mi:focus-visible { background: color-mix(in srgb, var(--on) 7%, transparent); outline: none; }
+.mi.sel { background: var(--ter-c); color: var(--on-ter-c); border-radius: 22px; }
+.mi[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
+.mi[aria-disabled="true"]:hover { background: none; }
+.mi-icon { width: 20px; display: grid; place-items: center; color: var(--on-v); flex: none; }
+.mi-icon.ter { color: var(--ter); }
+.mi.sel .mi-icon { color: inherit; }
+.mi-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mi-label { font-weight: 650; font-size: 14px; }
+.mi-side { font-weight: 450; color: var(--on-v); }
+.mi.sel .mi-side, .mi.sel .mi-hint { color: inherit; opacity: .8; }
+.mi-hint { font-size: 12px; color: var(--on-v); line-height: 1.35; }
+.mi-check { width: 18px; flex: none; display: grid; }
+.mnote { padding: 8px 12px; font-size: 12px; color: var(--on-v); line-height: 1.45; }
+.mnote b { color: var(--on); }
+.bgroup { display: flex; gap: 2px; padding: 2px 4px 6px; }
+.bg-btn { flex: 1; min-width: 0; min-height: 60px; padding: 8px 6px; border: 0; cursor: pointer; background: var(--sec-c); color: var(--on-sec-c); border-radius: var(--r-sm);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  transition: border-radius var(--d-sp-fast) var(--sp-fast), transform var(--d-sp-fast) var(--sp-fast), background-color var(--d-fx), color var(--d-fx), flex-grow var(--d-sp) var(--sp); }
+.bg-btn:first-child { border-radius: 24px var(--r-sm) var(--r-sm) 24px; }
+.bg-btn:last-child { border-radius: var(--r-sm) 24px 24px var(--r-sm); }
+.bg-btn.sel { background: var(--pri); color: var(--on-pri); border-radius: 30px; flex-grow: 1.25; }
+.bg-btn:active { transform: scale(.96); }
+.bg-t { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.bg-t .i { --s: 16px; }
+.bg-m { font-size: 11px; opacity: .8; }
+.mchips { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 8px 8px; }
+.mchip { height: 36px; min-width: 52px; padding: 0 12px; border-radius: var(--r-md); border: 1px solid var(--outline-v); background: transparent; cursor: pointer; font-weight: 650; font-size: 14px;
+  transition: border-radius var(--d-sp-fast) var(--sp-fast), transform var(--d-sp-fast) var(--sp-fast), background-color var(--d-fx); }
+.mchip.sel { background: var(--pri); color: var(--on-pri); border-color: transparent; border-radius: 18px; }
+.mchip:active { transform: scale(.94); }
+/* Slider (same as index.html / custom_slider.dart): thin track, round thumb, value bubble while dragging */
+.mslider { padding: 6px 12px 10px; }
+.mslider .row { justify-content: space-between; font-size: 13px; color: var(--on-v); margin-bottom: 2px; }
+.mslider .row b { color: var(--on); font-size: 14px; }
+.slider { position: relative; height: 40px; display: flex; align-items: center;
+  --sl-on: var(--pri); --sl-off: color-mix(in srgb, var(--pri) 20%, transparent); --sl-thumb: var(--pri); --sl-overlay: color-mix(in srgb, var(--pri) 12%, transparent); }
+.slider input { -webkit-appearance: none; appearance: none; width: 100%; height: 20px; background: transparent; cursor: pointer; margin: 0; }
+.slider input:focus-visible { outline: none; }
+.slider input::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--sl-on) var(--pct), var(--sl-off) var(--pct)); }
+.slider input::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-top: -8px; border-radius: 50%; background: var(--sl-thumb); box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 0 0 0 var(--sl-overlay); transition: box-shadow .15s; }
+.slider input:hover::-webkit-slider-thumb, .slider input:focus-visible::-webkit-slider-thumb { box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 0 0 10px var(--sl-overlay); }
+.slider input::-moz-range-track { height: 4px; border-radius: 2px; background: var(--sl-off); }
+.slider input::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--sl-on); }
+.slider input::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: 50%; background: var(--sl-thumb); }
+.slider-bubble { position: absolute; bottom: 34px; transform: translateX(-50%) scale(.4); transform-origin: 50% 120%; opacity: 0; pointer-events: none;
+  background: var(--pri); color: var(--on-pri); font-size: 12.5px; font-weight: 600; padding: 6px 10px; border-radius: 16px; transition: opacity .12s, transform .15s cubic-bezier(.2,.9,.3,1.3); }
+.slider-bubble::after { content: ''; position: absolute; left: 50%; bottom: -5px; width: 10px; height: 10px; background: inherit; transform: translateX(-50%) rotate(45deg); border-radius: 0 0 3px 0; }
+.slider.dragging .slider-bubble { opacity: 1; transform: translateX(-50%) scale(1); }
+
+/* Motion helpers */
+.enter { animation: enter var(--d-sp-slow) var(--sp-slow) both; animation-delay: calc(var(--i, 0) * 70ms); }
+@keyframes enter { from { opacity: 0; transform: translateY(22px) scale(.98); } }
+.shake { animation: shake .4s; }
+@keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+::view-transition-old(root) { animation: vt-out 180ms var(--fx) both; }
+::view-transition-new(root) { animation: vt-in 420ms var(--sp) both; }
+@keyframes vt-out { to { opacity: 0; } }
+@keyframes vt-in { from { opacity: 0; transform: translateY(12px); } }
+
+/* ---- 5. CANVAS CONTENT: how it works, by example ----------------------------- */
+.c-head { max-width: 760px; }
+.c-head h1 { margin: 14px 0 8px; font-size: clamp(30px, 4.2cqi, 52px); line-height: 1.05; font-weight: 820; letter-spacing: -.035em; font-stretch: 110%; }
+.c-head p { margin: 0; color: var(--on-v); font-size: 16px; max-width: 620px; }
+.hero-rot .rot {
+  display: inline-block;
+  position: relative;
+  overflow: hidden;
+  vertical-align: bottom;
+  color: var(--ter);
+  white-space: nowrap;
+  transition: width 450ms ease;
+}
+.rot-word { display: block; white-space: nowrap; }
+.rot-word.out { animation: word-out 450ms ease both; }
+.rot-word.in { position: absolute; left: 0; bottom: 0; animation: word-in 450ms ease both; }
+@keyframes word-out { to { transform: translateY(110%); filter: blur(5px); opacity: 0; } }
+@keyframes word-in { from { transform: translateY(-110%); filter: blur(5px); opacity: 0; } }
+
+.how { margin-top: 34px; }
+.how-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.how-head h2 { margin: 0 6px 0 0; font-size: 20px; font-weight: 780; letter-spacing: -.015em; }
+/* How it works: the steps cycle on a timer. Content slides up and out, then the next step slides up and in. */
+.hw { border-radius: 24px; background: var(--s1); overflow: hidden;
+  box-shadow: 0 0 0 1px var(--outline-v), 0 1px 1px rgba(0,0,0,.04), 0 2px 2px rgba(0,0,0,.04), 0 4px 4px rgba(0,0,0,.04), 0 8px 8px rgba(0,0,0,.04), 0 16px 16px rgba(0,0,0,.04); }
+.hw-body { padding: 26px; }
+.hw { display: flex; flex-direction: column; }
+#hn-host { display: contents; }
+
+/* Step controls under the steps: back and next around the step name, dots, pause. The current dot fills over its time on screen. */
+.hn { display: flex; align-items: center; gap: 10px; padding: 14px 18px; }
+.hn { order: 1; border-top: 1px solid var(--outline-v); }
+.hn button { font: inherit; }
+.hn-fill { position: absolute; inset: 0; border-radius: inherit; background: var(--pri); transform: scaleX(0); transform-origin: left center; pointer-events: none; }
+.run > .hn-fill { animation: segfill var(--dur, 2s) linear both; }
+.hn.paused .hn-fill { animation-play-state: paused; }
+
+.hn-arrow { flex: none; width: 40px; height: 40px; border: 0; border-radius: 50%; display: grid; place-items: center; background: var(--sec-c); color: var(--on-sec-c); cursor: pointer; transition: transform var(--d-sp-fast) var(--sp-fast), border-radius .3s var(--sp); }
+.hn-arrow:hover { border-radius: 14px; }
+.hn-arrow:active { transform: scale(.9); }
+.hn-arrow .i { --s: 22px; }
+.hn-mid { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 7px; min-width: 0; }
+.hn-label { font-size: 14px; font-weight: 700; white-space: nowrap; }
+.hn-label small { color: var(--on-v); font-weight: 550; margin-right: 6px; }
+.hn-dots { display: flex; gap: 6px; }
+.hn-dot { position: relative; width: 8px; height: 8px; padding: 0; border: 0; border-radius: 4px; background: var(--s4); overflow: hidden; cursor: pointer; transition: width .4s var(--sp); }
+.hn-dot.on { width: 36px; background: var(--s3); }
+.hn-dot.done { background: var(--pri); }
+.hn-dot .hn-fill { display: none; }
+.hn-dot.on .hn-fill { display: block; }
+
+
+.hw-pane { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.4fr); gap: 28px; align-items: center; min-height: 330px; }
+.hw-copy h3 { margin: 0 0 8px; font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+.hw-copy p { margin: 0 0 18px; color: var(--on-v); font-size: 15px; line-height: 1.6; }
+.hw-copy .vmeta { margin-top: 0; }
+.pop-in { animation: pop-in .45s var(--sp) both; animation-delay: calc(var(--i, 0) * 50ms); }
+@keyframes pop-in { from { opacity: 0; transform: translateY(8px) scale(.96); } }
+.quote { margin: 0; padding: 30px 18px 16px; border-radius: 18px; background: var(--s2); font-size: 15px; line-height: 1.6; position: relative; }
+.quote::before { content: "“"; position: absolute; left: 16px; top: 2px; font-size: 40px; line-height: 1; font-weight: 800; color: var(--ter); opacity: .6; }
+/* Typed prompt: the invisible full copy keeps the box size fixed; the typed layer sits on top */
+.quote .tw { display: grid; }
+.quote .tw > * { grid-area: 1 / 1; }
+.quote .tw-ghost { visibility: hidden; }
+.quote .tw-live { transition: opacity .45s ease; }
+.quote .tw-live.fade { opacity: 0; }
+.quote .tw-caret { display: none; width: 2px; height: 1.15em; margin-left: 2px; vertical-align: -.2em; border-radius: 1px; background: var(--pri); }
+.quote .tw-live.on .tw-caret { display: inline-block; animation: tw-blink 1s steps(1) infinite; }
+.quote .tw-live.typing .tw-caret { animation: none; }   /* solid while typing, blinks while it holds */
+.hw-visual .vmeta { margin-top: 12px; }
+/* Storyboard step: BounceCards (React Bits) rebuilt without React/GSAP. Cards bounce in once, then the focus
+      moves to the next card every 2 s: it straightens and grows, the others are pushed aside. */
+.bc-fit { display: flex; justify-content: center; height: calc(var(--bc-h) * var(--bc-k, 1)); }
+.bc { position: relative; flex: none; width: var(--bc-w); height: var(--bc-h); transform: scale(var(--bc-k, 1)); transform-origin: top center; }
+.bc-card { position: absolute; left: 50%; top: 50%; width: var(--bc-size); height: var(--bc-size); margin: calc(var(--bc-size) / -2) 0 0 calc(var(--bc-size) / -2);
+  border: var(--bc-border) solid var(--bc-border-color); border-radius: var(--bc-radius); overflow: hidden; background: var(--s3); cursor: pointer;
+  transition: transform .4s cubic-bezier(.34, 1.56, .64, 1); }   /* GSAP back.out(1.4) */
+.bc.shadow .bc-card { box-shadow: 0 4px 10px rgba(0, 0, 0, .2); }
+.bc-card img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.bc-cap { display: flex; justify-content: center; margin-top: 10px; }
+.bc-cap span { padding: 4px 12px; border-radius: 12px; background: var(--s1); box-shadow: 0 0 0 1px var(--outline-v); font-size: 13px; font-weight: 650; white-space: nowrap; }
+.bc-cap small { color: var(--on-v); font-weight: 500; margin-left: 6px; }
+
+.mini { position: relative; border-radius: 18px; overflow: hidden; background: #000; aspect-ratio: 16/9; }
+.mini video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.mini .cc { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); max-width: 88%; padding: 4px 10px; border-radius: 8px; background: rgba(0,0,0,.6); color: #fff; font-size: 12px; text-align: center; line-height: 1.35; }
+.mini .cc:empty { display: none; }
+.mini .badge { position: absolute; left: 10px; top: 10px; height: 24px; padding: 0 9px; border-radius: 12px; background: rgba(0,0,0,.55); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; gap: 4px; }
+.mini .badge .i { --s: 13px; }
+button.badge { border: 0; cursor: pointer; z-index: 2; transition: background-color var(--d-fx), transform var(--d-sp-fast) var(--sp-fast); }
+button.badge:hover { background: rgba(0,0,0,.75); }
+button.badge:active { transform: scale(.94); }
+.mini video { cursor: pointer; }
+.mini .big-play { position: absolute; inset: 0; margin: auto; width: 64px; height: 64px; border: 0; border-radius: 50%; display: none; place-items: center; background: rgba(255,255,255,.92); color: #000; cursor: pointer; z-index: 2;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35); transition: transform var(--d-sp-fast) var(--sp-fast); }
+.mini .big-play .i { --s: 32px; }
+.mini .big-play:active { transform: scale(.92); }
+.mini.paused .big-play { display: grid; }
+.segs { display: flex; gap: 3px; margin-top: 10px; }
+.seg { position: relative; flex: var(--d) 1 0; height: 5px; border-radius: 3px; background: var(--s3); overflow: hidden; }
+.seg i { position: absolute; inset: 0; background: var(--pri); border-radius: inherit; transform: scaleX(0); transform-origin: left center; }   /* transform, not width: no layout per frame */
+.seg.done i { transform: none; }
+.seg.cur i { animation: segfill 2s linear both; }
+@keyframes segfill { from { transform: scaleX(0); } to { transform: none; } }
+.vmeta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.vmeta span { height: 26px; padding: 0 9px; border-radius: 8px; background: var(--s2); font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
+.vmeta .i { --s: 14px; color: var(--on-v); }
+@container (max-width: 760px) {
+  .hw-pane { grid-template-columns: minmax(0, 1fr); min-height: 0; gap: 18px; }
+  .hw-body { padding: 18px; }
+}
+@container (max-width: 560px) {
+  .canvas-in { padding: 24px 16px 32px; }
+}
+
+/* ---- 6. SMALL SCREENS ------------------------------------------------------------ */
+@media (max-width: 900px) {
+  .ws { height: auto; min-height: 100vh; }
+  .ws-body { flex-direction: column; }
+  .panel { width: auto; }
+  .panel-scroll { overflow: visible; }
+  .canvas { overflow: visible; }
+  .crumb { display: none; }
+}
+@media (max-width: 719px) {
+  .ws { grid-template-columns: minmax(0, 1fr); padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
+  .topbar .brand { display: flex; }
+  /* The sidebar becomes a bottom tab bar (as on Home) */
+  .sidebar { position: fixed; inset: auto 0 0 0; top: auto; height: auto; margin: 0; flex-direction: row; gap: 0; padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); overflow: visible; border: 0; border-top: 1px solid var(--line); border-radius: 0; box-shadow: none; background: color-mix(in srgb, var(--sb-bg) 90%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+  .sb-scroll, .sb-bottom, .sb-nav, .sb-nav ul { display: contents; }
+  .sb-head, .sb-announce, .sb-theme, .sidebar .sb-theme-btn, .sb-support, .sb-foot, .sb-badge { display: none !important; }
+  .sb-nav li { flex: 1; }
+  .sb-nav a { position: relative; justify-content: center; width: auto; height: 52px; padding: 0; overflow: visible; font-size: 11px; }
+  .sb-nav a .sb-in { flex-direction: column; gap: 3px; }
+  .sb-nav a .sb-c { max-width: none; opacity: 1; filter: none; }
+  .sb-nav a[aria-current="page"] { background: transparent; color: var(--text); box-shadow: none; }
+  .sb-nav a[aria-current="page"] .si { color: var(--accent); }
+  .sb-nav a[aria-current="page"]::before { content: ""; position: absolute; left: 30%; right: 30%; top: -7px; height: 2px; border-radius: 0 0 2px 2px; background: var(--accent); }
+  .sb-create .si { width: 34px; height: 24px; padding: 3px 8px; border-radius: 999px; background: var(--accent); color: var(--accent-ink) !important; }
+  .snack { bottom: calc(80px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 640px) {
+  .topbar { padding: 0 8px 0 12px; gap: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.6"/><path d="M9.5 4.5v15"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.5 10.5 12 3.8l8.5 6.7"/><path d="M5.5 9.2v10.3h4.6v-5.8h3.8v5.8h4.6V9.2"/></symbol>
+  <symbol id="i-create" viewBox="0 0 24 24"><rect x="3" y="5.5" width="13" height="13" rx="3"/><path d="m16 10.2 4.6-2.7v9l-4.6-2.7"/><path d="M9.5 9v6M6.5 12h6"/></symbol>
+  <symbol id="i-projects" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.8l2.2 2.4h7a2 2 0 0 1 2 2v7.6a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-assets" viewBox="0 0 24 24"><rect x="3.5" y="7" width="13.5" height="13" rx="2.5"/><path d="M7.5 3.8H18a2.5 2.5 0 0 1 2.5 2.5v10.2"/><path d="m3.6 16.6 3.7-3.7 3.4 3.4 1.9-1.9 4.3 4.3"/><circle cx="12.6" cy="11" r="1.3"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M11 3.5 12.9 9l5.6 2-5.6 2L11 18.5 9.1 13l-5.6-2 5.6-2z"/><path d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.8"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19.5 14.6A7.8 7.8 0 0 1 9.4 4.5a7.8 7.8 0 1 0 10.1 10.1z"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.7 9.6a2.4 2.4 0 0 1 4.6.9c0 1.6-2.3 2-2.3 3.4"/><circle cx="12" cy="16.9" r=".9" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7.5h9.5M17.5 7.5H20M4 16.5h3M11 16.5h9"/><circle cx="15.5" cy="7.5" r="2"/><circle cx="9" cy="16.5" r="2"/></symbol>
+</svg>
+<div id="app"></div>
+<div class="menu" id="menu" role="menu" hidden></div>
+<div class="snack" id="snack" role="status" aria-live="polite"></div>
+
+<script src="example/projects/data.js"></script>   <!-- real projects (for the Projects count): node tools/sync-projects.mjs -->
+<script>
+'use strict';
+/* =============================================================================
+   SCRIPT MAP
+     1. DATA        example ideas, the "How it works" project, video models (prices are made up), what Auto picks
+     2. ICONS
+     3. UTILITIES   + Material shapes
+     5. STATE
+     6. VIEW        top bar, rail, panel, canvas
+     7. MENUS       Model, Shape, Length, Quality
+     8. ACTIONS, EVENTS, BOOT
+   ========================================================================== */
+
+/* ---- 1. DATA ---------------------------------------------------------------- */
+const MAX_IDEA = 4000;
+
+/* Example ideas for "Surprise me". */
+const EXAMPLES = [
+  { title: 'The Last Light', prompt: 'A lighthouse keeper climbs the spiral stairs at dusk, lights the great lamp, and watches a small fishing boat find its way home through the fog.' },
+  { title: 'Night Drive', prompt: 'A silver coupe parked on a rainy city street at night. Its headlights turn on, reflections ripple across the wet asphalt, then it drives away.' },
+  { title: 'First Loaves', prompt: 'Morning in a tiny mountain bakery: flour dust in the sunlight, hands shaping dough, and the first loaves coming out of a wood-fired oven.' },
+  { title: 'The Paper Boat', prompt: 'A paper boat drifts down a rain-filled gutter, past glowing shop windows, until a child lifts it out of the water and smiles.' },
+];
+
+/* The "How it works" example: a real project made with the app
+   (backend_dart/data/projects/97bc10b4548632ace7be4a4509d11932 and storyboards.db).
+   example/keepers-watch/ holds small copies made with ffmpeg: 480 px shot thumbnails, a poster, and
+   preview.mp4, 6 s cut from the 15 s render with 2 s of each shot (0-2, 5-7 and 10-12 s). */
+const KEEPER_DIR = 'example/keepers-watch/';
+const KEEPER = {
+  title: 'The Keeper\'s Watch',
+  prompt: 'A lighthouse keeper climbs the spiral stairs at dusk, lights the great lamp, and watches a small fishing boat find its way home through the fog.',
+  model: 'HeyGen Video', ratio: '16:9', secs: 15, res: '720p',
+  video: KEEPER_DIR + 'preview.mp4', poster: KEEPER_DIR + 'poster.jpg',
+  shots: [
+    { title: 'The Ascent', desc: 'The keeper climbing the spiral stairs at dusk.', secs: 5, motion: 'Zoom in', img: KEEPER_DIR + 'shot1-sm.jpg' },
+    { title: 'Ignition', desc: 'The keeper lighting the great lamp in the lantern room.', secs: 5, motion: 'Pan right', img: KEEPER_DIR + 'shot2-sm.jpg' },
+    { title: 'The Beacon', desc: 'The keeper watching a fishing boat navigate through fog.', secs: 5, motion: 'Zoom out', img: KEEPER_DIR + 'shot3-sm.jpg' },
+  ],
+};
+
+/* Video models. EXAMPLE DATA: the IDs match real OpenRouter video models, but prices, speeds and
+   limits are made up. The real app should load this list from the backend. */
+const ALL_RATIOS = ['16:9', '9:16', '1:1'];
+const VIDEO_MODELS = [
+  { id: 'bytedance/seedance-2.0-fast', name: 'Seedance 2.0 Fast', provider: 'ByteDance', tier: 'draft', usdPerSec: 0.03, minPer10s: 1, maxRes: '1080p', ratios: ALL_RATIOS },
+  { id: 'alibaba/wan-2.7', name: 'Wan 2.7', provider: 'Alibaba', tier: 'draft', usdPerSec: 0.04, minPer10s: 2, maxRes: '1080p', ratios: ALL_RATIOS },
+  { id: 'google/veo-3.1-lite', name: 'Veo 3.1 Lite', provider: 'Google', tier: 'draft', usdPerSec: 0.05, minPer10s: 1.5, maxRes: '720p', ratios: ALL_RATIOS },
+  { id: 'heygen/heygen-video-1', name: 'HeyGen Video', provider: 'HeyGen', tier: 'balanced', usdPerSec: 0.07, minPer10s: 2.5, maxRes: '1080p', ratios: ALL_RATIOS },
+  { id: 'kwaivgi/kling-v3.0-std', name: 'Kling 3.0 Standard', provider: 'Kuaishou', tier: 'balanced', usdPerSec: 0.08, minPer10s: 3, maxRes: '1080p', ratios: ALL_RATIOS },
+  { id: 'minimax/hailuo-3', name: 'Hailuo 3', provider: 'MiniMax', tier: 'balanced', usdPerSec: 0.08, minPer10s: 3, maxRes: '1080p', ratios: ['16:9', '9:16'] },
+  { id: 'bytedance/seedance-2.5', name: 'Seedance 2.5', provider: 'ByteDance', tier: 'best', usdPerSec: 0.12, minPer10s: 3, maxRes: '1080p', ratios: ALL_RATIOS },
+  { id: 'kwaivgi/kling-v3.0-pro', name: 'Kling 3.0 Pro', provider: 'Kuaishou', tier: 'best', usdPerSec: 0.14, minPer10s: 4, maxRes: '1080p', ratios: ALL_RATIOS },
+  { id: 'runway/gen-4.5', name: 'Runway Gen-4.5', provider: 'Runway', tier: 'best', usdPerSec: 0.15, minPer10s: 3, maxRes: '1080p', ratios: ['16:9', '9:16'] },
+  { id: 'google/veo-3.1', name: 'Veo 3.1', provider: 'Google', tier: 'best', usdPerSec: 0.2, minPer10s: 4, maxRes: '1080p', ratios: ALL_RATIOS },
+];
+const TIERS = {
+  draft: { label: 'Fast draft', prefer: ['bytedance/seedance-2.0-fast', 'alibaba/wan-2.7', 'google/veo-3.1-lite'] },
+  balanced: { label: 'Balanced', prefer: ['heygen/heygen-video-1', 'kwaivgi/kling-v3.0-std', 'minimax/hailuo-3'] },
+  best: { label: 'Best quality', prefer: ['google/veo-3.1', 'kwaivgi/kling-v3.0-pro', 'runway/gen-4.5', 'bytedance/seedance-2.5'] },
+};
+const resRank = { '480p': 0, '720p': 1, '1080p': 2 };
+const resCost = { '480p': 0.6, '720p': 1, '1080p': 1.5 };
+const videoModel = (id) => VIDEO_MODELS.find((m) => m.id === id) || VIDEO_MODELS[3];
+const isModelId = (c) => !!c && c.includes('/');
+const tierOf = (c) => (isModelId(c) ? videoModel(c).tier : c === 'auto' ? 'balanced' : c);
+function modelProblem(m, ratio, res) {
+  if (ratio && ratio !== 'auto' && !m.ratios.includes(ratio)) return `Doesn't support ${ratio}`;
+  if (res && res !== 'auto' && resRank[res] > resRank[m.maxRes]) return `Only up to ${m.maxRes}`;
+  return null;
+}
+function resolveModel(choice, ratio, res) {
+  if (isModelId(choice)) return videoModel(choice);
+  const list = (TIERS[tierOf(choice)] || TIERS.balanced).prefer.map(videoModel);
+  return list.find((m) => !modelProblem(m, ratio, res)) || list[0];
+}
+function estimate(m, secs, res) {
+  const cost = m.usdPerSec * secs * (resCost[res] || 1);
+  const min = Math.max(1, Math.round((m.minPer10s * secs) / 10));
+  return { cost, min, text: `≈ $${cost.toFixed(2)} · ~${min} min` };
+}
+/* What "Auto" becomes (stands in for Qwen reading the idea). */
+const AUTO = {
+  ratio(p) {
+    if (/\b(vertical|portrait|phones?|tiktok|reels?|shorts|stories)\b/i.test(p)) return ['9:16', 'Your idea mentions phones or Reels'];
+    if (/\b(square|feed post|instagram post)\b/i.test(p)) return ['1:1', 'Your idea mentions a square post'];
+    return ['16:9', 'Landscape suits most stories'];
+  },
+  secs(p) {
+    const w = p.split(/\s+/).filter(Boolean).length;
+    if (!w) return [15, 'Default until you write your idea'];
+    const s = w < 12 ? 10 : w < 22 ? 15 : w < 40 ? 20 : 30;
+    return [s, `Fits a ${w}-word idea`];
+  },
+};
+/** Every setting resolved to a concrete value, plus why Auto chose it. */
+const RESOLVED = new Map();
+function resolved(S, prompt) {
+  const key = `${S.videoModel}|${S.aspectRatio}|${S.duration}|${S.videoResolution}|${prompt}`;
+  let r = RESOLVED.get(key);
+  if (!r) {
+    r = resolveSettings(S, prompt);
+    if (RESOLVED.size > 40) RESOLVED.clear();
+    RESOLVED.set(key, r);
+  }
+  return r;
+}
+function resolveSettings(S, prompt) {
+  const [aRatio, whyRatio] = AUTO.ratio(prompt), [aSecs, whySecs] = AUTO.secs(prompt);
+  const ratio = S.aspectRatio === 'auto' ? aRatio : S.aspectRatio;
+  const secs = S.duration === 'auto' ? aSecs : S.duration;
+  const tier = tierOf(S.videoModel);
+  const model = resolveModel(S.videoModel, ratio, S.videoResolution);
+  let res = S.videoResolution === 'auto' ? (tier === 'best' ? '1080p' : '720p') : S.videoResolution;
+  let whyRes = tier === 'best' ? 'Sharpest, to match Best quality' : 'Sharp and quick to render';
+  if (resRank[res] > resRank[model.maxRes]) { res = model.maxRes; whyRes = `Highest ${model.name} supports`; }
+  return { ratio, secs, res, model, tier, est: estimate(model, secs, res), why: { aspectRatio: whyRatio, duration: whySecs, videoResolution: whyRes, videoModel: `${TIERS[tier].label} · ${model.name}` } };
+}
+const RATIO_INFO = { '16:9': ['Landscape', 'YouTube, TV and desktop', 16, 9], '9:16': ['Vertical', 'Phones, Reels and Shorts', 9, 16], '1:1': ['Square', 'Social feeds', 12, 12] };
+
+/* ---- 2. ICONS (Material, 24×24) ---------------------------------------------- */
+const ICONS = {
+  auto_awesome: '<path d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/>',
+  arrow_forward: '<path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/>',
+  check: '<path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>',
+  close: '<path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>',
+  expand_more: '<path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"/>',
+  chevron_right: '<path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>',
+  chevron_left: '<path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>',
+  videocam: '<path d="M15 8v8H5V8h10m1-2H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4V7c0-.55-.45-1-1-1z"/>',
+  movie: '<path d="M4 6.47L5.76 10H20v8H4V6.47M22 4h-4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4z"/>',
+  schedule: '<path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>',
+  hq: '<path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H5V6h14v12zM7.5 13h2v2H11V9H9.5v2.5h-2V9H6v6h1.5zm6.5 2h.75v1.5h1.5V15H17c.55 0 1-.45 1-1v-4c0-.55-.45-1-1-1h-3c-.55 0-1 .45-1 1v4c0 .55.45 1 1 1zm.5-4.5h2v3h-2v-3z"/>',
+  aspect: '<path d="M19 12h-2v3h-3v2h5v-5zM7 9h3V7H5v5h2V9zm14-6H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16.01H3V4.99h18v14.02z"/>',
+  dark_mode: '<path d="M9.37 5.51c-.18.64-.27 1.31-.27 1.99 0 4.08 3.32 7.4 7.4 7.4.68 0 1.35-.09 1.99-.27C17.45 17.19 14.93 19 12 19c-3.86 0-7-3.14-7-7 0-2.93 1.81-5.45 4.37-6.49zM12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/>',
+  light_mode: '<path d="M12 9c1.65 0 3 1.35 3 3s-1.35 3-3 3-3-1.35-3-3 1.35-3 3-3m0-2c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/>',
+  lightbulb: '<path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7zm2.85 11.1l-.85.6V16h-4v-2.3l-.85-.6C7.8 12.16 7 10.63 7 9c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.63-.8 3.16-2.15 4.1z"/>',
+  bolt: '<path d="M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z"/>',
+  photo: '<path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4.86 8.86l-3 3.87L9 13.14 6 17h12l-3.86-5.14z"/>',
+  upload: '<path d="M5 20h14v-2H5v2zm0-10h4v6h6v-6h4l-7-7-7 7z"/>',
+  music: '<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>',
+  music_off: '<path d="M4.27 3L3 4.27l9 9v.28c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4v-1.73L19.73 21 21 19.73 4.27 3zM14 7h4V3h-6v5.18l2 2z"/>',
+  add_photo: '<path d="M19 7v2.99s-1.99.01-2 0V7h-3s.01-1.99 0-2h3V2h2v3h3v2h-3zm-3 4V8h-3V5H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8h-3zM5 19l3-4 2 3 3-4 4 5H5z"/>',
+  pause: '<path d="M8 19c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2v10c0 1.1.9 2 2 2zm6-12v10c0 1.1.9 2 2 2s2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2z"/>',
+  play: '<path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/>',
+  add: '<path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>',
+  warning: '<path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>',
+  folder: '<path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/>',
+  grid: '<path d="M3 3v8h8V3H3zm6 6H5V5h4v4zm-6 4v8h8v-8H3zm6 6H5v-4h4v4zm4-16v8h8V3h-8zm6 6h-4V5h4v4zm-6 4v8h8v-8h-8zm6 6h-4v-4h4v4z"/>',
+  shuffle: '<path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/>',
+  settings: '<path d="M19.43 12.98c.04-.32.07-.64.07-.98 0-.34-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65A.49.49 0 0 0 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1a.57.57 0 0 0-.18-.03c-.17 0-.34.09-.43.25l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98 0 .33.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46a.5.5 0 0 0 .61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.06.02.12.03.18.03.17 0 .34-.09.43-.25l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>',
+};
+const ic = (n, s) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"${s ? ` style="--s:${s}px"` : ''}>${ICONS[n] || ''}</svg>`;
+
+/* ---- 3. UTILITIES ------------------------------------------------------------- */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const act = (a, arg) => ` data-act="${a}"${arg != null ? ` data-arg="${esc(arg)}"` : ''}`;
+const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* Material 3 Expressive shapes as polar functions (radius 0..1 for an angle). */
+const SHAPES = {
+  cookie9: (a) => 0.9 + 0.1 * Math.cos(9 * a),
+  cookie12: (a) => 0.92 + 0.08 * Math.cos(12 * a),
+  burst: (a) => 0.84 + 0.16 * Math.cos(10 * a),
+  pentagon: (a) => 0.87 + 0.13 * Math.cos(5 * a),
+  sunny: (a) => 0.93 + 0.07 * Math.cos(8 * a),
+  clover4: (a) => 0.74 + 0.26 * Math.abs(Math.cos(2 * a)),
+  oval: (a) => (0.66 / Math.hypot(0.66 * Math.cos(a), Math.sin(a))),
+};
+function shapeD(fn, size = 100, rot = 0, fn2, mix = 0) {
+  const c = size / 2, N = 120;
+  let d = '';
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    let r = fn(a - rot);
+    if (fn2) r = r + (fn2(a - rot) - r) * mix;
+    r *= c;
+    d += `${i ? 'L' : 'M'}${(c + r * Math.sin(a)).toFixed(2)} ${(c - r * Math.cos(a)).toFixed(2)}`;
+  }
+  return d + 'Z';
+}
+const COOKIE9 = shapeD(SHAPES.cookie9);
+const shape = (inner = '') => `<span class="shape-badge"><svg viewBox="0 0 100 100" aria-hidden="true"><path d="${COOKIE9}"/></svg>${inner}</span>`;
+const brandMark = () => `<span class="brand-mark"><svg class="shape" viewBox="0 0 100 100" aria-hidden="true"><path d="${COOKIE9}"/></svg>${ic('auto_awesome')}</span>`;
+const loader = (sz = 24) => `<span class="loader" data-loader style="--sz:${sz}px" aria-hidden="true"></span>`;
+
+/* ---- 5. STATE ------------------------------------------------------------------ */
+const state = {
+  theme: 'dark',
+  idea: { prompt: '', videoModel: 'auto', aspectRatio: 'auto', duration: 'auto', videoResolution: 'auto' },
+  refs: [],                  // reference images: { id, name, note, file, url }
+  audio: true,               // music and sound effects in the video
+  creating: false,
+  menu: null,
+};
+const SEEN = new Set();
+let exScene = 0;
+
+/* ---- 6. VIEW ------------------------------------------------------------------- */
+const FIELD = {
+  videoModel: { k: 'Model', icon: 'bolt' },
+  aspectRatio: { k: 'Shape', icon: 'aspect' },
+  duration: { k: 'Length', icon: 'schedule' },
+  videoResolution: { k: 'Quality', icon: 'hq' },
+};
+const FIELD_ORDER = ['videoModel', 'aspectRatio', 'duration', 'videoResolution'];
+function fieldValue(field, r) {
+  if (field === 'videoModel') return r.model.name;
+  if (field === 'aspectRatio') return r.ratio;
+  if (field === 'duration') return `${r.secs} sec`;
+  return r.res;
+}
+function fieldInfo(field) {
+  const S = state.idea, r = resolved(S, S.prompt), isAuto = S[field] === 'auto', val = fieldValue(field, r);
+  const lead = isAuto ? ic('auto_awesome', 18) : field === 'aspectRatio' ? `<span class="ratio-g" style="--w:${RATIO_INFO[r.ratio][2]};--h:${RATIO_INFO[r.ratio][3]}"></span>` : ic(FIELD[field].icon, 18);
+  const key = `${field}:${val}`, bump = !SEEN.has(key) && SEEN.has(`${field}:any`);
+  SEEN.add(key); SEEN.add(`${field}:any`);
+  const tag = isAuto ? 'Auto' : field === 'videoModel' && !isModelId(S.videoModel) ? TIERS[r.tier].label : 'Custom';
+  return { isAuto, val, lead, bump, tag, open: state.menu?.field === field, label: `${FIELD[field].k}: ${val}${isAuto ? ' (Auto)' : ''}` };
+}
+/** Setting as a list row. The menu opens beside the panel. */
+function setRow(field) {
+  const f = fieldInfo(field), r = resolved(state.idea, state.idea.prompt);
+  const lead = field === 'aspectRatio' ? `<span class="ratio-g" style="--w:${RATIO_INFO[r.ratio][2]};--h:${RATIO_INFO[r.ratio][3]}"></span>` : ic(FIELD[field].icon, 20);
+  return `<button class="set-row${f.isAuto ? ' auto' : ' custom'}${f.open ? ' open' : ''}" type="button" data-key="set:${field}" data-side="right" aria-haspopup="menu" aria-expanded="${f.open}" aria-label="${esc(f.label)}"${state.creating ? ' disabled' : act('open-set', field)}>
+    <span class="lead">${lead}</span><span class="txt"><span class="k">${FIELD[field].k}</span><span class="v${f.bump ? ' bump' : ''}">${esc(f.val)}</span></span>
+    <span class="tag">${f.isAuto ? ic('auto_awesome', 12) : ''}${esc(f.tag)}</span><span class="chev">${ic('chevron_right', 20)}</span></button>`;
+}
+const createBtn = () => `<button class="btn btn-filled xl sl create-btn" id="create" type="button"${act('create')}${state.creating ? ' disabled aria-busy="true"' : ''}>${state.creating ? `${loader(22)}Generating…` : `Generate${ic('arrow_forward')}`}</button>`;
+/** Audio on/off, as the last row of the settings list. */
+function audioRow() {
+  const on = state.audio;
+  return `<button class="set-row toggle${on ? ' is-on' : ''}" type="button" role="switch" aria-checked="${on}" aria-label="Audio"${state.creating ? ' disabled' : act('toggle-audio')}>
+    <span class="lead">${ic(on ? 'music' : 'music_off', 20)}</span><span class="txt"><span class="k">Audio</span><span class="v">${on ? 'On · music and sound effects' : 'Off · silent video'}</span></span>
+    <span class="switch${on ? ' on' : ''}" aria-hidden="true"><span class="knob">${on ? ic('check', 14) : ''}</span></span></button>`;
+}
+const settingsHtml = () => FIELD_ORDER.map(setRow).join('') + audioRow();
+
+/* ---- Reference images and @mentions (same behaviour as the Home composer) ----------------
+   Images attached in the Reference images box, by paste or by drag and drop
+   are listed in that box. Typing @ opens a menu of just those images; picking one inserts an inline chip that points
+   at the image's stable id, so removing the image marks its mentions as broken (and sending is
+   blocked until they're fixed). Clicking an image card adds its @mention; clicking a broken mention
+   deletes it. Images stay in the browser (object URLs). */
+const MAX_REFS = 4, MAX_REF_MB = 10;
+const REF_TYPES = /^image\/(png|jpeg|webp)$/;
+const refById = (id) => state.refs.find((r) => r.id === id);
+let refTold = false, refPending = null, edLastRange = null;
+
+/* The idea box is a rich editor (contenteditable) so it can hold the inline chips. It is a single
+   element that survives re-renders, and it keeps the textarea's interface (value, disabled,
+   focus) so the rest of the page reads and writes the idea unchanged.
+   ED.value is plain text with mentions as "@Name"; edSerialize('tokens') writes "@[Name](id)". */
+const ED = document.createElement('div');
+Object.assign(ED, { id: 'prompt', className: 'ai-ed', contentEditable: 'true', spellcheck: true });
+[['role', 'textbox'], ['aria-multiline', 'true'], ['aria-label', 'Describe your video. Type @ to mention a reference image.'],
+  ['aria-haspopup', 'listbox'], ['aria-controls', 'mentionMenu'], ['aria-expanded', 'false'], ['aria-autocomplete', 'list']].forEach(([k, v]) => ED.setAttribute(k, v));
+function edSerialize(mode) {
+  let out = '';
+  const walk = (n) => {
+    for (const c of n.childNodes) {
+      if (c.nodeType === 3) { out += c.data; continue; }
+      if (c.nodeType !== 1) continue;
+      if (c.classList.contains('mention')) {
+        const r = refById(c.dataset.ref), name = r ? r.name : c.dataset.name;
+        out += mode === 'tokens' ? `@[${name}](${c.dataset.ref})` : `@${name}`;
+      } else if (c.nodeName === 'BR') { if (!(n === ED && c === ED.lastChild)) out += '\n'; }   // a lone trailing <br> is the editor's placeholder line
+      else { if (/^(DIV|P)$/.test(c.nodeName) && out && !out.endsWith('\n')) out += '\n'; walk(c); }
+    }
+  };
+  walk(ED);
+  return out.replace(/ /g, ' ');
+}
+function edCaretEnd() {
+  const r = document.createRange(); r.selectNodeContents(ED); r.collapse(false);
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+}
+const edHasCaret = () => { const sel = getSelection(); return sel.rangeCount > 0 && ED.contains(sel.anchorNode); };
+Object.defineProperties(ED, {
+  value: { get: () => edSerialize('plain'), set: (v) => { ED.textContent = v == null ? '' : String(v); } },
+  disabled: {
+    get: () => ED.contentEditable === 'false',
+    set: (v) => { ED.contentEditable = v ? 'false' : 'true'; if (v) ED.setAttribute('aria-disabled', 'true'); else ED.removeAttribute('aria-disabled'); },
+  },
+});
+const edFocus = HTMLElement.prototype.focus;
+ED.focus = function (opts) { edFocus.call(this, opts); if (!edHasCaret()) edCaretEnd(); };
+/* Keep the editor to plain text + mention chips: strip formatting the browser may add */
+function edNormalize() {
+  ED.querySelectorAll('div, p, b, i, u, strong, em, font, span').forEach((el) => {
+    if (el.closest('.mention')) return;
+    const frag = document.createDocumentFragment();
+    if (/^(DIV|P)$/.test(el.nodeName) && el.previousSibling) frag.append('\n');
+    frag.append(...el.childNodes);
+    el.replaceWith(frag);
+  });
+  if (!ED.textContent && !ED.querySelector('.mention') && ED.firstChild) ED.innerHTML = '';   // emptied: drop the stray <br>, so the placeholder shows
+}
+ED.addEventListener('beforeinput', (e) => {   // the character limit
+  if (/^insert(Text|LineBreak|Paragraph|Replacement)/.test(e.inputType) && getSelection().isCollapsed && ED.value.length >= MAX_IDEA) e.preventDefault();
+});
+ED.addEventListener('dragstart', (e) => e.preventDefault());   // mention chips stay put
+ED.addEventListener('paste', (e) => {
+  if ([...(e.clipboardData?.files || [])].some((f) => f.type.startsWith('image/'))) return;   // images: the page's paste handler attaches them
+  e.preventDefault();
+  const t = (e.clipboardData?.getData('text/plain') || '').slice(0, Math.max(0, MAX_IDEA - ED.value.length));
+  if (t) document.execCommand('insertText', false, t);   // plain text only
+});
+ED.addEventListener('click', (e) => {   // clicking a broken mention deletes it
+  const m = e.target.closest('.mention.broken'); if (!m) return;
+  e.preventDefault();
+  let next = m.nextSibling;
+  while (next?.nodeType === 3 && !next.data) next = next.nextSibling;   // the browser leaves empty text nodes around chips
+  if (next?.nodeType === 3 && /^[ \u00a0]/.test(next.data)) next.data = next.data.slice(1);
+  m.remove(); ED.dispatchEvent(new Event('input', { bubbles: true }));
+});
+
+const refMentions = (id) => $$('.mention', ED).filter((m) => !id || m.dataset.ref === id);
+function refFreeName() {
+  const used = new Set([...state.refs.map((r) => r.name), ...refMentions().map((m) => m.dataset.name)]);
+  for (let n = 1; ; n++) if (!used.has(`Image ${n}`)) return `Image ${n}`;
+}
+/** Attach images; returns the new records */
+function addRefFiles(files) {
+  const list = [...files], ok = [];
+  let skipped = 0;
+  for (const file of list) {
+    if (!REF_TYPES.test(file.type) || file.size > MAX_REF_MB * 1048576 || state.refs.length >= MAX_REFS) { skipped++; continue; }
+    const r = { id: `img_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: refFreeName(), note: '', file, url: URL.createObjectURL(file) };
+    state.refs.push(r); ok.push(r);
+  }
+  if (skipped) snack(`Added ${ok.length} of ${list.length}. Up to ${MAX_REFS} PNG, JPG or WebP images, ${MAX_REF_MB} MB each.`);
+  else if (ok.length && !refTold) { refTold = true; snack(`Added ${ok.map((r) => r.name).join(', ')}. Click ${ok.length > 1 ? 'one' : 'it'} or type @ to mention ${ok.length > 1 ? 'them' : 'it'} in your idea.`); }
+  if (ok.length) patchRefs();
+  return ok;
+}
+function refRemove(id) {
+  const i = state.refs.findIndex((r) => r.id === id); if (i < 0) return;
+  const [r] = state.refs.splice(i, 1), uses = refMentions(id).length;
+  patchRefs();
+  snack(`Removed ${r.name}${uses ? ` · ${uses} mention${uses > 1 ? 's' : ''} now broken` : ''}`, { label: 'Undo', fn: () => {
+    if (refById(r.id)) return;
+    if (state.refs.length >= MAX_REFS) { snack(`Up to ${MAX_REFS} reference images. Remove one first.`); return; }
+    state.refs.splice(Math.min(i, state.refs.length), 0, r); patchRefs();
+  } });
+}
+const refCountText = () => (state.refs.length ? `${state.refs.length} / ${MAX_REFS}` : 'Optional');
+/** The upload box (Aceternity FileUpload style): the whole box opens the file picker; each image
+    card adds its @mention to the idea; × removes the image. */
+function refsHtml() {
+  const n = state.refs.length, full = n >= MAX_REFS;
+  const files = state.refs.map((r) => {
+    const fresh = !SEEN.has('ref:' + r.id); SEEN.add('ref:' + r.id);
+    return `<div class="fu-file${fresh ? ' new' : ''}" data-ref="${r.id}" data-ref-open="${r.id}" role="button" tabindex="0"${act('ref-mention', r.id)} title="Click to add @${esc(r.name)} to your idea" aria-label="${esc(r.name)}, ${esc(r.file.name)}. Add @${esc(r.name)} to your idea"><img src="${r.url}" alt="">
+      <div class="fu-meta"><div class="fu-row"><span class="fu-name">${esc(r.name)}</span><span class="fu-size tnum">${(r.file.size / 1048576).toFixed(2)} MB</span>
+        <button class="fu-x" type="button"${act('remove-ref', r.id)} aria-label="Remove ${esc(r.name)}" title="Remove">${ic('close', 16)}</button></div>
+      <div class="fu-row"><span class="fu-type" title="${esc(r.file.name)}">${esc(r.file.name)}</span><span>modified ${new Date(r.file.lastModified).toLocaleDateString()}</span></div></div></div>`;
+  }).join('');
+  const sub = !n ? 'Drag or drop your images here or click to upload'
+    : full ? 'That’s the maximum. Remove one to add another.' : 'Drag or drop more images here or click to upload';
+  const body = n ? `<div class="fu-files">${files}</div>`
+    : `<div class="fu-stage" aria-hidden="true"><div class="fu-outline"></div><div class="fu-card">${ic('upload', 24)}<span class="drop-text">Drop it</span></div></div>
+       <p class="fu-hint">PNG, JPG or WebP · up to ${MAX_REF_MB} MB each · max ${MAX_REFS}</p>`;
+  return `<div class="fu${full ? ' full' : ''}${state.creating ? ' disabled' : ''}" role="button" tabindex="${full ? -1 : 0}" aria-label="Upload reference images"${full || state.creating ? ' aria-disabled="true"' : act('add-ref')}>
+      <div class="fu-inner"><p class="fu-title">Reference images <span class="pill" id="ref-count">${refCountText()}</span></p><p class="fu-sub">${sub}</p>${body}</div>
+    </div>
+    <p class="p-note">Keeps a character, product or look consistent. Click an image, or type <b class="ter">@</b> in your idea, to mention it.</p>`;
+}
+function patchRefs() {
+  const host = $('#refs'); if (host) host.innerHTML = refsHtml();
+  refSync();
+}
+/** Bring every inline mention up to date with its image: name, thumbnail, or broken */
+function refSync() {
+  let broken = 0;
+  refMentions().forEach((m) => {
+    const r = refById(m.dataset.ref), img = $('img', m);
+    m.classList.toggle('broken', !r);
+    if (r) { m.dataset.name = r.name; img.src = r.url; } else broken++;
+    img.hidden = !r;
+    $('.mention-t', m).textContent = r ? r.name : m.dataset.name;
+    m.title = r ? r.name : `${m.dataset.name} was removed · click to delete this mention`;
+    m.setAttribute('aria-label', r ? `Reference ${r.name}` : `Broken reference ${m.dataset.name}`);
+  });
+  const w = $('#ai-warn'); if (!w) return;
+  w.hidden = !broken;
+  const html = broken ? `${ic('warning')}<span>${broken === 1 ? 'A mention points' : `${broken} mentions point`} to a removed image. Click it to delete it, or undo the removal.</span>` : '';
+  if (w.innerHTML !== html) w.innerHTML = html;
+}
+function refMentionEl(r) {
+  const m = document.createElement('span');
+  m.className = 'mention'; m.contentEditable = 'false'; m.dataset.ref = r.id; m.dataset.name = r.name;
+  m.innerHTML = `<img src="${r.url}" alt=""><svg class="i mention-warn" viewBox="0 0 24 24" aria-hidden="true">${ICONS.warning}</svg><span class="mention-t">${esc(r.name)}</span>`;
+  return m;
+}
+/** Insert a mention at a range (the typed "@query"), else where the caret last was, else at the end */
+function refInsert(r, range) {
+  let rg = range;
+  if (!rg) {
+    const sel = getSelection();   // the live caret if it's in the idea, else where it last was
+    rg = sel.rangeCount && ED.contains(sel.anchorNode) ? sel.getRangeAt(0).cloneRange()
+      : edLastRange && ED.contains(edLastRange.startContainer) ? edLastRange.cloneRange() : null;
+    if (!rg) { rg = document.createRange(); rg.selectNodeContents(ED); rg.collapse(false); }
+    const prev = rg.startContainer.nodeType === 3 ? rg.startContainer.data.slice(0, rg.startOffset) : ED.value;
+    if (prev && !/\s$/.test(prev)) { rg.insertNode(document.createTextNode(' ')); rg.collapse(false); }
+  }
+  rg.deleteContents();
+  const m = refMentionEl(r), sp = document.createTextNode(' ');
+  rg.insertNode(sp); rg.insertNode(m);
+  ED.focus();
+  const after = document.createRange(); after.setStartAfter(sp); after.collapse(true);
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(after);
+  ED.dispatchEvent(new Event('input', { bubbles: true }));
+}
+document.addEventListener('selectionchange', () => {
+  const sel = getSelection();
+  if (sel.rangeCount && ED.contains(sel.anchorNode)) edLastRange = sel.getRangeAt(0).cloneRange();
+  if (mm.open) mmUpdate();
+});
+
+/* @ menu */
+const mmEl = Object.assign(document.createElement('div'), { className: 'mmenu', id: 'mentionMenu', hidden: true });
+mmEl.setAttribute('role', 'listbox'); mmEl.setAttribute('aria-label', 'Reference images');
+document.body.append(mmEl);
+const mm = { open: false, q: null, items: [], idx: 0 };
+/** The "@query" just before the caret, if any */
+function mmQuery() {
+  const sel = getSelection();
+  if (!sel.rangeCount || !sel.isCollapsed) return null;
+  const r = sel.getRangeAt(0), node = r.startContainer;
+  if (node.nodeType !== 3 || !ED.contains(node)) return null;
+  const m = node.data.slice(0, r.startOffset).match(/(?:^|[\s([{"'“])@([^\s@]*(?: [^\s@]*)?)$/);
+  return m ? { node, start: r.startOffset - m[1].length - 1, end: r.startOffset, text: m[1] } : null;
+}
+function mmUpdate() {
+  const q = state.creating ? null : mmQuery();
+  if (!q) { mmClose(); return; }
+  const needle = q.text.trim().toLowerCase(), refs = state.refs;
+  const items = refs.filter((r) => !needle || r.name.toLowerCase().includes(needle) || r.file.name.toLowerCase().includes(needle));
+  if (!items.length && /\s/.test(q.text)) { mmClose(); return; }   // just text with an @ in it
+  if (!mm.open) mm.idx = 0;
+  mm.q = q; mm.items = items; mm.idx = Math.min(mm.idx, Math.max(0, items.length - 1));
+  mmEl.innerHTML = '<div class="mm-head">Reference images</div>'
+    + (items.length
+      ? items.map((r, i) => `<div class="mm-opt" role="option" id="mm-${r.id}" data-i="${i}" aria-selected="${i === mm.idx}"><img src="${r.url}" alt=""><span class="mm-t"><b>${esc(r.name)}</b><small>${esc(r.file.name)}</small></span></div>`).join('')
+      : `<p class="mm-empty">${refs.length ? `No image matches “${esc(q.text)}”.` : 'No reference images yet.'}</p>`)
+    + (refs.length < MAX_REFS ? `<button type="button" class="mm-add" data-mm-add>${ic('add')}Attach an image</button>` : '')
+    + (items.length ? '<p class="mm-tip">↑ ↓ to choose · Enter to insert · Esc to close</p>' : '');
+  mmEl.hidden = false; mm.open = true;
+  ED.setAttribute('aria-expanded', 'true');
+  if (items.length) ED.setAttribute('aria-activedescendant', `mm-${items[mm.idx].id}`); else ED.removeAttribute('aria-activedescendant');
+  mmPlace();
+  $('.mm-opt[aria-selected="true"]', mmEl)?.scrollIntoView({ block: 'nearest' });
+}
+function mmPlace() {
+  const r = document.createRange(); r.setStart(mm.q.node, mm.q.start); r.setEnd(mm.q.node, Math.min(mm.q.start + 1, mm.q.node.length));
+  const at = r.getBoundingClientRect(), w = mmEl.offsetWidth, h = mmEl.offsetHeight;
+  const up = at.bottom + 8 + h > innerHeight - 12 && at.top - 8 - h > 12;
+  mmEl.style.left = `${Math.max(12, Math.min(at.left - 10, innerWidth - w - 12))}px`;
+  mmEl.style.top = `${up ? at.top - 8 - h : at.bottom + 8}px`;
+}
+function mmClose() {
+  if (!mm.open) return;
+  mm.open = false; mmEl.hidden = true;
+  ED.setAttribute('aria-expanded', 'false'); ED.removeAttribute('aria-activedescendant');
+}
+function mmPick(i) {
+  const r = mm.items[i], q = mm.q; if (!r || !q) return;
+  const rg = document.createRange(); rg.setStart(q.node, q.start); rg.setEnd(q.node, q.end);
+  mmClose(); refInsert(r, rg);
+}
+ED.addEventListener('input', () => { edNormalize(); mmUpdate(); refSync(); });
+ED.addEventListener('keydown', (e) => {   // capture: runs before Ctrl + Enter to generate
+  if (!mm.open) return;
+  const n = mm.items.length, stop = () => { e.preventDefault(); e.stopImmediatePropagation(); };
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && n) { stop(); mm.idx = (mm.idx + (e.key === 'ArrowDown' ? 1 : -1) + n) % n; mmUpdate(); }
+  else if ((e.key === 'Enter' || e.key === 'Tab') && n) { stop(); mmPick(mm.idx); }
+  else if (e.key === 'Escape') { stop(); mmClose(); }
+}, true);
+ED.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== ED) mmClose(); }));
+mmEl.addEventListener('mousedown', (e) => e.preventDefault());   // keep the caret in the idea
+mmEl.addEventListener('click', (e) => {
+  const o = e.target.closest('.mm-opt');
+  if (o) { mmPick(+o.dataset.i); return; }
+  if (e.target.closest('[data-mm-add]')) { refPending = mm.q; mmClose(); $('#ref-input')?.click(); }
+});
+addEventListener('resize', () => { if (mm.open) mmPlace(); });
+addEventListener('scroll', () => { if (mm.open) mmPlace(); }, { passive: true, capture: true });
+
+/* "Your idea" placeholder: while the box is empty, the hint and then the example ideas type
+   themselves out at a slightly uneven pace (short pauses after spaces, longer ones at
+   punctuation), hold 2 s with a blinking caret, fade out, and the next one starts. It's the
+   same typing as Home's "How it works". It disappears as soon as you type, pauses while the
+   tab is hidden or a video is being generated, and shows the plain hint with reduced motion.
+   State lives here, not in the element, so a re-render picks up mid-sentence. */
+const PH_HINT = 'Describe your video: who is in it, what happens, where, and the mood…';
+const PH_START = 400, PH_HOLD = 2000, PH_FADE = 450;
+const PH_LINES = [PH_HINT, ...EXAMPLES.map((x) => x.prompt)];
+const ph = { timer: 0, line: 0, full: PH_HINT, k: PH_HINT.length, mode: 'idle' };   // mode: idle | typing | hold | fade
+const phEmpty = () => !ED.textContent && !ED.querySelector('.mention');
+function phPaint() {
+  const el = $('#ai-ph'); if (!el) return;
+  el.hidden = !phEmpty();
+  $('.tw-text', el).textContent = ph.full.slice(0, ph.k);
+  el.classList.toggle('on', ph.mode !== 'idle');
+  el.classList.toggle('typing', ph.mode === 'typing');
+  el.classList.toggle('fade', ph.mode === 'fade');
+}
+function phStop() {
+  clearTimeout(ph.timer); ph.timer = 0;
+  Object.assign(ph, { full: PH_HINT, k: PH_HINT.length, mode: 'idle' });
+  phPaint();
+}
+function phType() {
+  const full = PH_LINES[ph.line++ % PH_LINES.length];
+  const plan = [...full].map((ch) => (/[.,;:!?…]/.test(ch) ? 240 + Math.random() * 140 : ch === ' ' ? 50 + Math.random() * 80 : 24 + Math.random() * 50));
+  Object.assign(ph, { full, k: 0, mode: 'typing' }); phPaint();
+  const tick = () => {
+    ph.k++; phPaint();
+    if (ph.k < full.length) { ph.timer = setTimeout(tick, plan[ph.k]); return; }
+    ph.mode = 'hold'; phPaint();
+    ph.timer = setTimeout(() => {
+      ph.mode = 'fade'; phPaint();
+      ph.timer = setTimeout(phType, PH_FADE + 150);
+    }, PH_HOLD);
+  };
+  ph.timer = setTimeout(tick, PH_START);
+}
+/** Start or stop the typing to match the box: empty, visible, idle and motion allowed */
+function phSync() {
+  const run = phEmpty() && !reduceMotion && !document.hidden && !state.creating && !!$('#ai-ph');
+  if (run && !ph.timer) phType();
+  else if (!run && ph.timer) phStop();
+  else phPaint();
+}
+document.addEventListener('visibilitychange', phSync);
+
+function topbar() {
+  return `<header class="topbar">
+    <div class="brand">${brandMark()}<span class="wm">Qwen Create</span></div>
+    <span class="crumb">Create · <b>New video</b></span>
+  </header>`;
+}
+/* ---- Sidebar: the same as Home's. Projects, Assets and Settings open those views in
+   home.html; collapsed state, theme, announcement and new-user preview are shared with it. */
+const HOME_URL = 'home.html';
+const homeGet = (k, fallback) => { try { const v = localStorage.getItem('qc_home_' + k); return v === null ? fallback : JSON.parse(v); } catch { return fallback; } };
+const homeSet = (k, v) => { try { localStorage.setItem('qc_home_' + k, JSON.stringify(v)); } catch { /* storage unavailable */ } };
+const mqSbPhone = matchMedia('(max-width: 719px)'), mqSbNarrow = matchMedia('(max-width: 1179px)');
+const si = (n) => `<svg class="si" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const SB_MARK = '<svg class="sb-mark" viewBox="0 0 30 30" aria-hidden="true"><rect class="bm-bg" width="30" height="30" rx="9"/><rect class="bm-fg" x="8" y="9" width="2.2" height="12" rx="1.1" opacity=".55"/><path class="bm-fg" d="M13 9.6v10.8a.7.7 0 0 0 1.07.6l8.1-5.4a.7.7 0 0 0 0-1.2l-8.1-5.4A.7.7 0 0 0 13 9.6z"/></svg>';
+/** Projects in the badge: the synced real projects (6 samples without them), none in the new-user preview */
+const sbProjectCount = () => (homeGet('newUser', false) ? 0 : Array.isArray(window.QC_PROJECTS) ? window.QC_PROJECTS.length : 6);
+function sidebar() {
+  const dark = state.theme === 'dark', n = sbProjectCount();
+  const link = (href, icon, label, extra = '') => `<li><a href="${href}"${extra}><span class="sb-in">${si(icon)}<span class="sb-c sb-label">${label}</span></span>${label === 'Projects' ? `<span class="sb-c"><span class="sb-badge" id="sbProjects">${n || ''}</span></span>` : ''}</a></li>`;
+  const announce = homeGet('announce', 'shown') === 'dismissed' ? '' : `<div class="sb-announce" id="sbAnnounce">
+        <span class="sb-announce-ic" aria-hidden="true">${si('spark')}</span>
+        <strong>Wan 2.7 is here</strong>
+        <p>Fast 1080p drafts while you shape the story. Pick it in the model list.</p>
+        <button type="button" class="sb-announce-cta"${act('browse-models')}>Browse models</button>
+        <button type="button" class="sb-ib sb-announce-x"${act('sb-announce-x')} aria-label="Dismiss announcement">${si('x')}</button>
+      </div>`;
+  return `<aside class="sidebar" aria-label="Sidebar">
+    <div class="sb-scroll">
+      <div class="sb-head">
+        <a class="sb-brand" href="${HOME_URL}" aria-label="Qwen Create, home">${SB_MARK}<span class="sb-c"><span class="sb-name">Qwen Create</span></span></a>
+        <button type="button" class="sb-ib sb-toggle" id="sbToggle"${act('sb-toggle')} aria-expanded="true" aria-label="Collapse sidebar">${si('panel')}</button>
+      </div>
+      <nav class="sb-nav sb-nav-main" aria-label="Main"><ul>
+        ${link(HOME_URL, 'home', 'Home')}
+        ${link('studio.html', 'create', 'Create', ' class="sb-create" aria-current="page"')}
+        ${link(HOME_URL + '#projects', 'projects', 'Projects')}
+        ${link(HOME_URL + '#assets', 'assets', 'Assets')}
+      </ul></nav>
+    </div>
+    <div class="sb-bottom">
+      ${announce}
+      <div class="sb-theme" role="radiogroup" aria-label="Theme">
+        <label><input type="radio" name="sbTheme" value="light"${dark ? '' : ' checked'}>${si('sun')}Light</label>
+        <label><input type="radio" name="sbTheme" value="dark"${dark ? ' checked' : ''}>${si('moon')}Dark</label>
+      </div>
+      <button type="button" class="sb-ib sb-theme-btn"${act('theme')} aria-label="Switch to ${dark ? 'light' : 'dark'} theme" title="Switch to ${dark ? 'light' : 'dark'} theme">${si(dark ? 'sun' : 'moon')}</button>
+      <nav class="sb-nav sb-nav-end" aria-label="Secondary"><ul>
+        <li class="sb-support"><button type="button"${act('sb-support')}><span class="sb-in">${si('help')}<span class="sb-c sb-label">Support</span></span></button></li>
+        ${link(HOME_URL + '#settings', 'settings', 'Settings')}
+      </ul></nav>
+      <div class="sb-foot">
+        <label class="sb-proto"><span>New-user preview</span><input type="checkbox" role="switch" class="sb-switch" id="sbNewUser"${homeGet('newUser', false) ? ' checked' : ''}></label>
+        <div class="sb-me" title="Your workspace · Creator plan"><span class="sb-avatar" aria-hidden="true">Y</span><span class="sb-c"><span class="sb-me-text"><span class="sb-me-name">Your workspace</span><span class="sb-me-plan">Creator plan</span></span></span></div>
+      </div>
+    </div>
+  </aside>`;
+}
+/** Rail (icons only) when collapsed or narrower than 1180px; a bottom tab bar on phones */
+function applyRail() {
+  const collapsed = homeGet('sidebar', 'expanded') === 'collapsed', railOn = !mqSbPhone.matches && (collapsed || mqSbNarrow.matches);
+  const d = document.documentElement;
+  d.dataset.sidebar = collapsed ? 'collapsed' : 'expanded';
+  d.dataset.rail = String(railOn);
+  const t = $('#sbToggle');
+  if (t) { t.setAttribute('aria-expanded', String(!collapsed)); t.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar'); }
+  $$('.sidebar .sb-nav :is(a, button)').forEach((el) => { const l = $('.sb-label', el)?.textContent; if (railOn && l) el.title = l; else el.removeAttribute('title'); });
+}
+mqSbPhone.addEventListener('change', applyRail);
+mqSbNarrow.addEventListener('change', applyRail);
+/* Bootstrap Icons used by the AI-Input design (16 x 16). */
+const BI = {
+  send: '<path d="M16 8A8 8 0 1 0 0 8a8 8 0 0 0 16 0m-7.5 3.5a.5.5 0 0 1-1 0V5.707L5.354 7.854a.5.5 0 1 1-.708-.708l3-3a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 5.707z"/>',
+};
+const bi = (n) => `<svg viewBox="0 0 16 16" aria-hidden="true">${BI[n]}</svg>`;
+/** "Your idea": the glowing input. */
+function aiInput(I) {
+  const off = state.creating ? ' disabled' : '';
+  return `<div class="ai" id="ai">
+    <div class="ai-box" id="ai-box">
+      <div class="ai-wrap">
+        <div class="ai-ph" id="ai-ph" aria-hidden="true"><span class="tw-text">${esc(PH_HINT)}</span><span class="tw-caret"></span></div>
+        <div id="prompt-slot"></div>
+        <p class="ai-warn" id="ai-warn" role="status" hidden></p>
+        <div class="ai-bar">
+          <div class="ai-left">
+            <button class="ai-btn" type="button"${act('surprise')} aria-label="Surprise me" title="Surprise me"${off}>${ic('shuffle', 18)}</button>
+          </div>
+          <div class="ai-right">
+            <span class="ai-count tnum" id="count">${I.prompt.length} / ${MAX_IDEA.toLocaleString()}</span>
+            <button class="ai-send" type="button" id="ai-send"${act('create')} aria-label="Generate" title="Generate (Ctrl + Enter)"${off}>${bi('send')}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function panel() {
+  const I = state.idea, r = resolved(I, I.prompt);
+  return `<aside class="panel" aria-label="Create" data-enter="panel">
+    <div class="panel-scroll">
+      <div id="refs">${refsHtml()}</div>
+      <input type="file" id="ref-input" accept="image/png,image/jpeg,image/webp" multiple hidden>
+      <div class="p-sec"><div class="p-label">${ic('lightbulb')}Your idea</div>
+        ${aiInput(I)}</div>
+      <div class="p-sec"><div class="p-label">${ic('videocam')}Video settings</div>
+        <div class="set-list" id="settings">${settingsHtml()}</div>
+        </div>
+    </div>
+    <div class="panel-foot"><div class="est-row"><span>Estimated</span><b class="tnum" id="est">${r.est.text}</b></div><span id="create-slot">${createBtn()}</span></div>
+  </aside>`;
+}
+const ROT_WORDS = ['short film', 'product ad', 'music video', 'trailer', 'bedtime story'];
+let rotIdx = 0;
+function canvas() {
+  const where = 'in the panel on the left';
+  return `<main class="canvas" id="canvas"><div class="canvas-in">
+    <header class="c-head hero-rot" data-enter="head"><span class="assist">${ic('auto_awesome')}AI video studio</span>
+      <h1>Turn one idea into a <span class="rot" id="rot">${ROT_WORDS[rotIdx]}</span></h1>
+      <p>Describe it ${where}. We write the script and draw a storyboard you can edit, then turn it into your video.</p></header>
+    <section class="how" data-enter="how" style="--i:1" aria-label="How it works">
+      <div class="how-head"><h2>How it works</h2></div>
+      <div id="example">${howHtml()}</div>
+    </section>
+  </div></main>`;
+}
+
+/* "How it works": the three steps cycle on a timer, over and over. */
+const HOW = [
+  { id: 'idea', label: 'Your idea', icon: 'lightbulb' },
+  { id: 'board', label: 'Storyboard', icon: 'grid' },
+  { id: 'video', label: 'Video', icon: 'movie' },
+];
+const SHOT_MS = 2000;   // each shot of the preview stays 2 seconds
+const HOW_DWELL = { idea: 4000, board: 4000, video: SHOT_MS * KEEPER.shots.length };   // idea 4 s; storyboard 4 s; video plays the whole 6 s clip (2 s per shot)
+/* Set to a step id ('idea', 'board' or 'video') to show only that step in "How it works"; null plays the full loop. */
+const HOW_ONLY = null;
+let howStep = HOW_ONLY || 'idea', howTimer = 0, howBusy = false, shotTimer = 0;
+
+/* One video element, kept between steps so it stays loaded. */
+const exVideo = Object.assign(document.createElement('video'), { src: KEEPER.video, poster: KEEPER.poster, muted: true, playsInline: true, preload: 'none', loop: true });
+exVideo.setAttribute('aria-label', 'Preview of the example video');
+/** True after someone presses pause on the preview: the "How it works" loop waits too. */
+let previewPaused = false;
+/** Play preview.mp4 from the start. It holds 2 s of each shot, so it stays in step with the shot timer. */
+function startPreview() {
+  if (exVideo.currentTime > 0.05) {
+    // Rewind. Some local servers can't seek inside a file; reloading rewinds there too.
+    if (exVideo.seekable.length && exVideo.seekable.end(0) > 0) exVideo.currentTime = 0;
+    else exVideo.load();
+  }
+  if (howRunning()) playPreview();
+}
+function playPreview() {
+  const p = exVideo.play?.();
+  if (p) p.catch(() => setPreviewUi(true));   // autoplay blocked: show the play button
+}
+/** Update the play/pause button and the big play button. */
+function setPreviewUi(paused) {
+  const host = $('#ex-mini'); if (!host) return;
+  host.classList.toggle('paused', paused);
+  const b = $('#ex-toggle');
+  if (b) { b.innerHTML = `${ic(paused ? 'play' : 'pause')}${paused ? 'Play' : 'Playing'}`; b.setAttribute('aria-label', paused ? 'Play preview' : 'Pause preview'); }
+}
+exVideo.addEventListener('play', () => setPreviewUi(false));
+exVideo.addEventListener('pause', () => setPreviewUi(previewPaused));   // pausing between steps or off screen keeps the Playing look
+exVideo.addEventListener('click', () => ACTIONS['preview-toggle']());
+/** Load the example media once the page is idle, so the first paint is not slowed down. */
+let exPrimed = false;
+const exImages = [];
+function primeExample() {
+  if (exPrimed) return;
+  exPrimed = true;
+  KEEPER.shots.forEach((sh) => { const im = new Image(); im.decoding = 'async'; im.src = sh.img; exImages.push(im); });
+  exVideo.preload = 'auto';
+  exVideo.load();
+}
+function mountVideo() {
+  primeExample();
+  const host = $('#ex-mini'); if (!host) return;
+  host.prepend(exVideo);
+  startPreview();
+}
+
+function howHtml() {
+  return `<div class="hw" id="hw"><div id="hn-host">${howNav()}</div><div class="hw-body" id="hw-body" aria-live="polite"><div class="hw-pane" id="hw-pane">${howPane(howStep)}</div></div></div>`;
+}
+/* Step controls: back / next, a dot per step (click to jump), pause. */
+const HOW_SHORT = { idea: 'Idea', board: 'Storyboard', video: 'Video' };
+function howNav() {
+  const i = HOW.findIndex((t) => t.id === howStep), cls = (k) => (k < i ? ' done' : k === i ? ' on' : '');
+  return `<nav class="hn${previewPaused ? ' paused' : ''}" id="hn" aria-label="How it works steps">
+    <button class="hn-arrow" type="button"${act('how-prev')} aria-label="Previous step">${ic('chevron_left')}</button>
+    <div class="hn-mid"><div class="hn-label" id="hn-label"><small>Step ${i + 1} of ${HOW.length}</small>${HOW_SHORT[howStep]}</div>
+      <div class="hn-dots">${HOW.map((t, k) => `<button class="hn-dot${cls(k)}" type="button" data-step${act('how-go', t.id)} aria-label="${t.label}"><i class="hn-fill"></i></button>`).join('')}</div></div>
+    <button class="hn-arrow" type="button"${act('how-next')} aria-label="Next step">${ic('chevron_right')}</button></nav>`;
+}
+/** Mark the current step in the controls. restart: start its fill over (the step clock just started). */
+function howNavSync(restart = false) {
+  const nav = $('#hn'); if (!nav) return;
+  const i = HOW.findIndex((t) => t.id === howStep);
+  nav.classList.toggle('paused', !howRunning());
+  $$('[data-step]', nav).forEach((el, k) => {
+    el.classList.toggle('done', k < i); el.classList.toggle('on', k === i);
+    if (k === i) el.setAttribute('aria-current', 'step'); else el.removeAttribute('aria-current');
+  });
+  const runners = [$$('[data-step]', nav)[i]];
+  nav.style.setProperty('--dur', HOW_DWELL[howStep] + 'ms');
+  if (restart) {
+    $$('.run', nav).forEach((el) => el.classList.remove('run'));
+    runners.forEach((el) => { if (!el) return; void el.offsetWidth; el.classList.add('run'); });
+  } else if (!runners.some((el) => el?.classList.contains('run'))) $$('.run', nav).forEach((el) => el.classList.remove('run'));
+  const label = $('#hn-label'); if (label) label.innerHTML = `<small>Step ${i + 1} of ${HOW.length}</small>${HOW_SHORT[howStep]}`;
+}
+function howPane(step) {
+  const ex = KEEPER;
+  if (step === 'idea') {
+    return `<div class="hw-copy"><h3>Describe your idea</h3>
+        <p>Write a sentence or two: who is in it, what happens, where, and the mood. Add reference images to keep a character or product the same in every shot.</p>
+        <button class="btn btn-tonal sm sl" type="button"${act('use-example')}>${ic('auto_awesome', 18)}Use this idea</button></div>
+      <div class="hw-visual"><blockquote class="quote pop-in"><span class="sr">${esc(ex.prompt)}</span><span class="tw" aria-hidden="true"><span class="tw-ghost">${esc(ex.prompt)}</span><span class="tw-live"><span class="tw-text">${esc(ex.prompt)}</span><span class="tw-caret"></span></span></span></blockquote>
+        <div class="vmeta">${[['auto_awesome', 'Auto settings'], ['bolt', ex.model], ['aspect', ex.ratio], ['schedule', `${ex.secs} sec`], ['hq', ex.res]].map(([i, t], k) => `<span class="pop-in" style="--i:${k + 2}">${ic(i)}${esc(t)}</span>`).join('')}</div></div>`;
+  }
+  if (step === 'board') {
+    return `<div class="hw-copy"><h3>Review the storyboard</h3>
+        <p>We write the script and draw every shot. Edit the text, reorder or retime scenes and redraw any frame, all before anything is rendered.</p></div>
+      <div class="hw-visual">${boardVisual()}</div>`;
+  }
+  const segs = ex.shots.map((sh, k) => `<span class="seg${k < exScene ? ' done' : k === exScene ? ' cur' : ''}" style="--d:1"><i></i></span>`).join('');
+  return `<div class="hw-copy"><h3>Get your video</h3>
+      <p>Each shot is animated with its camera move and everything is joined into one ${ex.secs}-second video.</p>
+      <div class="vmeta"><span>${ic('bolt')}${esc(ex.model)}</span><span>${ic('aspect')}${ex.ratio}</span><span>${ic('hq')}${ex.res}</span><span>${ic('schedule')}${fmtTime(ex.secs)}</span></div></div>
+    <div class="hw-visual"><div class="mini pop-in${previewPaused ? ' paused' : ''}" id="ex-mini"><button class="badge" type="button" id="ex-toggle"${act('preview-toggle')} aria-label="${previewPaused ? 'Play preview' : 'Pause preview'}">${ic(previewPaused ? 'play' : 'pause')}${previewPaused ? 'Play' : 'Playing'}</button>
+      <button class="big-play" type="button"${act('preview-toggle')} aria-label="Play preview">${ic('play')}</button><div class="cc" id="ex-cc">${esc(ex.shots[exScene].desc)}</div></div>
+      <div class="segs">${segs}</div></div>`;
+}
+/* BounceCards settings (from the React Bits example). */
+const BOUNCE = {
+  containerWidth: 500, containerHeight: 320, cardSize: 200, spread: 85, rotation: 10, arc: 0, pushDistance: 160,
+  hoverScale: 1.06, bounciness: 0.6, animationDelay: 0.5, animationStagger: 0.06,
+  borderWidth: 5, borderColor: '#ffffff', radius: 25, shadow: true, enableHover: true,
+};
+/* Per-shot crop for the square cards, so the subject stays in view (the boat is on the left of shot 3). */
+const BOUNCE_FOCUS = ['55% center', '60% center', '38% center'];
+let bcHover = null, bcIntroTimer = 0;
+/** GSAP's elastic.out(1, p) as a CSS linear() easing. */
+function elasticEasing(p) {
+  if (!CSS.supports?.('animation-timing-function', 'linear(0, 1)')) return 'cubic-bezier(.34, 1.56, .64, 1)';
+  const s = p / 4, pts = [];
+  for (let i = 0; i <= 60; i++) { const t = i / 60; pts.push(t === 0 ? 0 : t === 1 ? 1 : +(Math.pow(2, -10 * t) * Math.sin(((t - s) * 2 * Math.PI) / p) + 1).toFixed(4)); }
+  return `linear(${pts.join(', ')})`;
+}
+/** Base place of card i: spread out from the middle, tilted, optionally on an arc. */
+function bcBase(i, n) {
+  const mid = (n - 1) / 2, d = i - mid, half = Math.max(1, mid);
+  return { x: d * BOUNCE.spread, y: d * d * BOUNCE.arc, r: (-d / half) * BOUNCE.rotation };
+}
+/** Focus card f (straight, a bit bigger); push the others away, nearest first. */
+function bcLayout(f) {
+  const cards = $$('.bc-card'), n = cards.length;
+  cards.forEach((c, i) => {
+    const b = bcBase(i, n);
+    if (f == null) { c.style.transform = `translate(${b.x}px, ${b.y}px) rotate(${b.r}deg)`; c.style.zIndex = i; c.style.transitionDelay = '0s'; return; }
+    if (i === f) { c.style.transform = `translate(${b.x}px, ${b.y}px) rotate(0deg) scale(${BOUNCE.hoverScale})`; c.style.zIndex = n + 1; c.style.transitionDelay = '0s'; return; }
+    const push = i < f ? -BOUNCE.pushDistance : BOUNCE.pushDistance;
+    c.style.transform = `translate(${b.x + push}px, ${b.y}px) rotate(${b.r}deg)`;
+    c.style.zIndex = i;
+    c.style.transitionDelay = Math.abs(f - i) * 0.05 + 's';
+  });
+  const cap = $('#bc-cap'), sh = KEEPER.shots[f ?? (boardLoop % n)];
+  if (cap && f != null) {
+    cap.innerHTML = `${f + 1} · ${esc(sh.title)}<small>${sh.secs}s · ${esc(sh.motion)}</small>`;
+    cap.animate?.([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 250, easing: 'ease' });
+  }
+}
+/** The focused card: the one under the pointer, otherwise the one the loop is on. */
+const bcFocus = () => bcLayout(bcHover ?? (boardLoop % KEEPER.shots.length));
+/** Scale the fan to fit its column (a push of 160 px needs about 700 px). */
+function bcFit() {
+  const fit = $('.bc-fit'); if (!fit) return;
+  const need = 2 * (BOUNCE.spread * (KEEPER.shots.length - 1) / 2 + BOUNCE.pushDistance + (BOUNCE.cardSize * BOUNCE.hoverScale) / 2);
+  fit.style.setProperty('--bc-k', Math.min(1, fit.parentElement.clientWidth / Math.max(BOUNCE.containerWidth, need)).toFixed(3));
+}
+/** Bounce in (elastic, staggered), then focus the loop's card. */
+function bcIntro() {
+  clearTimeout(bcIntroTimer);
+  bcFit();
+  bcLayout(null);
+  const cards = $$('.bc-card');
+  if (!reduceMotion) {
+    const ease = elasticEasing(BOUNCE.bounciness);
+    cards.forEach((c, i) => c.animate?.([{ scale: 0 }, { scale: 1 }], { duration: 1000, delay: (BOUNCE.animationDelay + i * BOUNCE.animationStagger) * 1000, easing: ease, fill: 'backwards' }));
+  }
+  if (BOUNCE.enableHover) cards.forEach((c, i) => {
+    c.addEventListener('pointerenter', () => { bcHover = i; bcFocus(); });
+    c.addEventListener('pointerleave', () => { bcHover = null; bcFocus(); });
+  });
+  bcIntroTimer = setTimeout(bcFocus, reduceMotion ? 0 : 1100);
+}
+let boardLoop = 0;
+/** The Storyboard step: the shots as BounceCards. Each loop focuses the next shot. */
+function boardVisual() {
+  const shots = KEEPER.shots, n = shots.length, k = boardLoop % n, cur = shots[k], B = BOUNCE;
+  return `<div class="bc-fit" style="--bc-w:${B.containerWidth}px;--bc-h:${B.containerHeight}px;--bc-size:${B.cardSize}px;--bc-border:${B.borderWidth}px;--bc-border-color:${B.borderColor};--bc-radius:${B.radius}px"><div class="bc${B.shadow ? ' shadow' : ''}">
+      ${shots.map((sh, i) => `<div class="bc-card" role="img" aria-label="${i + 1} · ${esc(sh.title)}"><img src="${sh.img}" alt="" width="480" height="270" decoding="async" style="object-position:${BOUNCE_FOCUS[i] || 'center'}"></div>`).join('')}</div></div>
+      <div class="bc-cap"><span id="bc-cap">${k + 1} · ${esc(cur.title)}<small>${cur.secs}s · ${esc(cur.motion)}</small></span></div>`;
+}
+/** After the Storyboard step is shown: bounce the cards in. */
+function afterBoard() {
+  bcHover = null;
+  if ($('.bc')) bcIntro();
+}
+async function goHow(step, force = false) {
+  if ((step === howStep && !force) || howBusy) return;
+  // Replaying the Storyboard step: the cards stay; the focus moves to the next card.
+  if (force && step === 'board' && howStep === 'board' && $('.bc')) {
+    boardLoop++; clearTimeout(bcIntroTimer); bcFocus(); scheduleHow(); return;
+  }
+  if (step === 'board') boardLoop++;
+  howBusy = true; howStep = step; exScene = 0;
+  clearTimeout(howTimer); clearInterval(shotTimer); twStop();
+  howNavSync();   // highlight the new step right away; its fill starts with the step clock
+  const pane = $('#hw-pane');
+  if (pane) {
+    const motion = !reduceMotion && pane.animate;
+    if (motion) {   // exit: up and out
+      const out = pane.animate([{ transform: 'none', opacity: 1 }, { transform: 'translateY(-10px)', opacity: 0 }], { duration: 200, easing: 'ease', fill: 'forwards' });
+      await out.finished; out.cancel();
+    }
+    if (step !== 'video') exVideo.pause();
+    pane.innerHTML = howPane(step);
+    if (step === 'video') mountVideo();
+    if (step === 'board') afterBoard();
+    if (motion) await pane.animate([{ transform: 'translateY(10px)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 200, easing: 'ease' }).finished;   // enter
+  }
+  howBusy = false;
+  scheduleHow();
+}
+/** True while "How it works" is on screen and the tab is visible. */
+let howVisible = true;
+const howRunning = () => howVisible && !document.hidden && !previewPaused;
+/* "Describe your idea": the prompt types itself out at a slightly uneven pace (short pauses
+   after spaces, longer ones at punctuation), holds 2 s with a blinking caret, then fades out.
+   The Idea step lasts exactly one such cycle, so it hands off to Storyboard right after the
+   fade and types again the next time round (same as Home). Stops off-screen; full text with
+   reduced motion. An invisible full copy (.tw-ghost) keeps the box size fixed. */
+const TW_START = 400, TW_HOLD = 2000, TW_FADE = 450;
+const tw = { timer: 0, plan: [] };
+function twPlan() {
+  tw.plan = [...KEEPER.prompt].map((ch) => (/[.,;:!?]/.test(ch) ? 240 + Math.random() * 140 : ch === ' ' ? 50 + Math.random() * 80 : 24 + Math.random() * 50));
+  HOW_DWELL.idea = Math.round(TW_START + tw.plan.reduce((a, b) => a + b, 0) + TW_HOLD + TW_FADE);
+}
+function twStop(showFull) {
+  clearTimeout(tw.timer); tw.timer = 0;
+  const live = $('#example .tw-live'); if (!live) return;
+  live.classList.remove('on', 'typing', 'fade');
+  if (showFull) $('.tw-text', live).textContent = KEEPER.prompt;
+}
+function twRun() {
+  twStop();
+  const live = $('#example .tw-live'); if (!live) return;
+  const text = $('.tw-text', live), full = KEEPER.prompt;
+  let i = 0;
+  text.textContent = ''; live.classList.add('on', 'typing');
+  const type = () => {
+    i++; text.textContent = full.slice(0, i);
+    if (i < full.length) { tw.timer = setTimeout(type, tw.plan[i]); return; }
+    live.classList.remove('typing');
+    tw.timer = setTimeout(() => live.classList.add('fade'), TW_HOLD);
+  };
+  tw.timer = setTimeout(type, TW_START);
+}
+/** Start the step clock and the shot clock together, so a step ends right after its last shot. */
+function scheduleHow() {
+  clearTimeout(howTimer);
+  clearInterval(shotTimer);
+  if (reduceMotion || !howRunning()) { twStop(true); howNavSync(); return; }
+  if (howStep === 'idea') twPlan();   // the Idea step lasts one typing cycle
+  howNavSync(true);
+  restartShots();
+  howTimer = setTimeout(() => {
+    if (!$('#hw')) return;
+    if (HOW_ONLY) { goHow(HOW_ONLY, true); return; }   // single-step mode: replay it, featuring the next shot
+    const i = HOW.findIndex((t) => t.id === howStep);
+    goHow(HOW[(i + 1) % HOW.length].id);
+  }, HOW_DWELL[howStep] - 40);   // just before the shot clock would wrap back to shot 1
+  if (howStep === 'idea') twRun(); else twStop();
+}
+function stepExample() {
+  if (howBusy || !howRunning()) return;
+  showScene((exScene + 1) % KEEPER.shots.length);
+}
+/** Highlight shot k in the storyboard, fill the progress bar up to it, and show it in the video. */
+function showScene(k) {
+  const host = $('#example'); if (!host) return;
+  exScene = k;
+  $$('.seg', host).forEach((el, i) => { el.classList.remove('cur'); el.classList.toggle('done', i < exScene); if (i === exScene) { void el.offsetWidth; el.classList.add('cur'); } });
+  const cc = $('#ex-cc'); if (cc) cc.textContent = KEEPER.shots[exScene].desc;
+  if (howStep === 'video' && k === 0 && $('#ex-mini')) startPreview();   // the clip runs on its own; only restart it
+}
+
+function pageView() {
+  return `<div class="ws">${sidebar()}<div class="ws-main">${topbar()}
+    <div class="ws-body">${panel()}${canvas()}</div></div></div>`;
+}
+const setText = (el, t) => { if (el && el.textContent !== t) el.textContent = t; };
+function patchComposer() {
+  const r = resolved(state.idea, state.idea.prompt);
+  const host = $('#settings');
+  if (host) { const html = settingsHtml(); if (host._html !== html) { host.innerHTML = html; host._html = html; } }
+  setText($('#est'), r.est.text);
+  setText($('#count'), `${state.idea.prompt.length} / ${MAX_IDEA.toLocaleString()}`);
+  const slot = $('#create-slot');
+  if (slot && slot._creating !== state.creating) { slot.innerHTML = createBtn(); slot._creating = state.creating; }
+  if (ED.disabled !== state.creating) ED.disabled = state.creating;
+  refSync();
+  phSync();
+  $$('#ai .ai-btn, #ai-send').forEach((b) => { b.disabled = state.creating; });
+  if (state.creating) startLoaders();
+}
+function applyEnter(root = document) {
+  $$('[data-enter]', root).forEach((el) => {
+    const k = el.dataset.enter;
+    if (!SEEN.has('enter:' + k)) { SEEN.add('enter:' + k); el.classList.add('enter'); }
+  });
+}
+function autogrow(el) { if (el.tagName !== 'TEXTAREA') return; el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
+function render() {
+  closeMenu(true);
+  $('#app').innerHTML = pageView();
+  applyRail();
+  $('#prompt-slot')?.replaceWith(ED);   // the editor is one element that survives re-renders
+  refSync();
+  phSync();
+  applyEnter();
+  howBusy = false;
+  if (howStep === 'video') mountVideo();
+  if (howStep === 'board') afterBoard();
+  watchHow();
+  scheduleHow();
+}
+/* Stop the "How it works" clocks and the video while they can't be seen. */
+let howObserver = null;
+function watchHow() {
+  howObserver?.disconnect();
+  const hw = $('#hw');
+  if (!hw || !('IntersectionObserver' in window)) return;
+  howObserver = new IntersectionObserver(([e]) => { howVisible = e.isIntersecting; howVisibilityChanged(); }, { threshold: 0.15 });
+  howObserver.observe(hw);
+}
+function howVisibilityChanged() {
+  if (howRunning()) {
+    if (!howBusy) showScene(0);   // restart the current step from its first shot, in step with its timer
+    scheduleHow();
+  } else {
+    clearTimeout(howTimer); clearInterval(shotTimer); twStop(true);
+    exVideo.pause();
+    howNavSync();
+  }
+}
+document.addEventListener('visibilitychange', howVisibilityChanged);
+
+/* ---- 7. MENUS ---------------------------------------------------------------------- */
+function mItem({ a, arg, sel = false, icon = '', iconCls = '', label, side = '', hint = '', disabled = false }) {
+  return `<button class="mi${sel ? ' sel' : ''}" type="button" role="menuitemradio" aria-checked="${sel}"${disabled ? ' aria-disabled="true"' : act(a, arg)}>
+    <span class="mi-icon ${iconCls}">${icon}</span><span class="mi-main"><span class="mi-label">${label}${side ? ` <span class="mi-side">${side}</span>` : ''}</span>${hint ? `<span class="mi-hint">${hint}</span>` : ''}</span><span class="mi-check">${sel ? ic('check', 18) : ''}</span></button>`;
+}
+function settingMenu(field) {
+  const S = state.idea, prompt = S.prompt, r = resolved(S, prompt), groups = [];
+  const picked = isModelId(S.videoModel) ? videoModel(S.videoModel) : null;
+  const ra = resolved({ ...S, [field]: 'auto' }, prompt);
+  groups.push(`<div class="gh">${ic('auto_awesome')}${FIELD[field].k}</div>` + mItem({ a: 'pick', arg: `${field}|auto`, sel: S[field] === 'auto', icon: ic('auto_awesome', 18), iconCls: 'ter', label: 'Auto', side: `· ${fieldValue(field, ra)} right now`, hint: ra.why[field] }));
+  const head = `<div class="gh sub">Or choose</div>`;
+  if (field === 'aspectRatio') {
+    groups.push(head + Object.entries(RATIO_INFO).map(([v, [name, sub, w, h]]) => {
+      const off = picked && !picked.ratios.includes(v) ? `Not available with ${picked.name}` : null;
+      return mItem({ a: 'pick', arg: `aspectRatio|${v}`, sel: S.aspectRatio === v, icon: `<span class="ratio-g" style="--w:${w};--h:${h}"></span>`, label: v, side: `· ${name}`, hint: off || sub, disabled: !!off });
+    }).join(''));
+  } else if (field === 'videoResolution') {
+    groups.push(head + [['480p', 'Fastest, standard detail'], ['720p', 'Sharp and quick'], ['1080p', 'Full HD, sharpest']].map(([v, note]) => {
+      const off = picked && resRank[v] > resRank[picked.maxRes] ? `${picked.name} goes up to ${picked.maxRes}` : null;
+      return mItem({ a: 'pick', arg: `videoResolution|${v}`, sel: S.videoResolution === v, icon: ic('hq', 18), label: v, hint: off || note, disabled: !!off });
+    }).join(''));
+  } else if (field === 'duration') {
+    const secs = r.secs, f = (secs - 4) / 56;
+    const chips = [5, 10, 15, 30, 60].map((v) => `<button class="mchip${S.duration === v ? ' sel' : ''}" type="button" role="menuitemradio" aria-checked="${S.duration === v}"${act('pick', `duration|${v}`)}>${v}s</button>`).join('');
+    groups.push(head + `<div class="mchips">${chips}</div>
+      <div class="mslider"><div class="row"><span>Custom length</span><b class="tnum" id="dur-val">${secs} sec</b></div><div class="slider" style="--pct:${f * 100}%"><input type="range" id="dur-slider" min="4" max="60" step="1" value="${secs}" aria-label="Custom length in seconds"><span class="slider-bubble" style="left:calc(10px + (100% - 20px) * ${f})">${secs}s</span></div></div>
+      <div class="mnote">Under 8 sec: 1–2 shots with one smooth camera move.</div>`);
+  }
+  return groups;
+}
+function modelMenu() {
+  const S = state.idea, prompt = S.prompt, r = resolved(S, prompt), choice = S.videoModel, specific = isModelId(choice);
+  const isAuto = choice === 'auto', tierSel = specific || isAuto ? null : choice;
+  const ra = resolved({ ...S, videoModel: 'auto' }, prompt);
+  const g0 = `<div class="gh">${ic('auto_awesome')}Model</div>` + mItem({ a: 'pick', arg: 'videoModel|auto', sel: isAuto, icon: ic('auto_awesome', 18), iconCls: 'ter', label: 'Auto', side: `· ${esc(ra.model.name)} right now`, hint: `Balanced for most videos · ${ra.est.text}` });
+  const btns = ['draft', 'balanced', 'best'].map((k) => {
+    const rr = resolved({ ...S, videoModel: k }, prompt), sel = tierSel === k;
+    return `<button class="bg-btn${sel ? ' sel' : ''}" type="button" role="menuitemradio" aria-checked="${sel}"${act('pick', `videoModel|${k}`)}><span class="bg-t">${sel ? ic('check') : ''}${TIERS[k].label}</span><span class="bg-m">${rr.est.text.split(' · ')[0]}</span></button>`;
+  }).join('');
+  const g1 = `<div class="gh sub">Or choose what matters most</div><div class="bgroup" role="group">${btns}</div>
+    <div class="mnote">${tierSel ? `We'll use <b>${esc(r.model.name)}</b> · ${r.est.text}` : 'We pick the best model for that goal.'}</div>`;
+  const res = S.videoResolution === 'auto' ? 'auto' : S.videoResolution;
+  let g2 = `<div class="gh sub">Or pick a specific model</div>`;
+  for (const k of ['draft', 'balanced', 'best']) {
+    g2 += VIDEO_MODELS.filter((m) => m.tier === k).map((m) => {
+      const problem = modelProblem(m, r.ratio, res), est = estimate(m, r.secs, r.res);
+      return mItem({ a: 'pick', arg: `videoModel|${m.id}`, sel: choice === m.id, icon: ic(k === 'draft' ? 'bolt' : k === 'best' ? 'auto_awesome' : 'movie', 18), label: m.name, side: `· ${m.provider}`, hint: problem || `${TIERS[k].label} · ${est.text}`, disabled: !!problem });
+    }).join('');
+  }
+  const g3 = `<div class="mnote">Example prices for a ${r.secs} sec, ${r.res} video. The real list and prices come from the backend.</div>`;
+  return [g0, g1, g2, g3];
+}
+function openMenu(field, anchor) {
+  if (state.menu && state.menu.field === field) { closeMenu(); return; }
+  closeMenu(true);
+  state.menu = { field, key: anchor.dataset.key };
+  anchor.classList.add('open'); anchor.setAttribute('aria-expanded', 'true');
+  drawMenu(anchor);
+  ($('#menu .sel') || $('#menu [data-act]'))?.focus({ preventScroll: true });
+}
+function drawMenu(anchor) {
+  const m = state.menu, el = $('#menu');
+  if (!m) return;
+  anchor = anchor || $(`[data-key="${m.key}"]`);
+  el.innerHTML = (m.field === 'videoModel' ? modelMenu() : settingMenu(m.field)).map((g) => `<div class="mgroup">${g}</div>`).join('');
+  el.hidden = false;
+  placeMenu(anchor);
+}
+/** Position the open menu next to its row (beside the panel) or above/below it. */
+function placeMenu(anchor) {
+  const m = state.menu, el = $('#menu');
+  if (!m) return;
+  anchor = anchor || $(`[data-key="${m.key}"]`);
+  if (!anchor) return;
+  const r = anchor.getBoundingClientRect(), minW = m.field === 'videoModel' ? 420 : 340;
+  const w = Math.min(Math.max(anchor.dataset.side ? 0 : r.width, minW), innerWidth - 16);
+  el.style.width = w + 'px'; el.style.maxHeight = '';
+  const side = anchor.dataset.side === 'right' && r.right + 14 + w <= innerWidth - 8;
+  el.classList.toggle('side', side);
+  if (side) {   // beside the panel, lined up with the row
+    el.style.maxHeight = innerHeight - 16 + 'px';
+    el.style.left = r.right + 14 + 'px';
+    el.style.top = clamp(r.top - 8, 8, innerHeight - el.offsetHeight - 8) + 'px';
+    el.classList.remove('up');
+    return;
+  }
+  el.style.left = clamp(r.left, 8, innerWidth - w - 8) + 'px';
+  const below = innerHeight - r.bottom - 12, above = r.top - 12, h = el.offsetHeight, down = h <= below || below >= above;
+  el.style.maxHeight = Math.max(200, down ? below : above) + 'px';
+  el.classList.toggle('up', !down);
+  el.style.top = (down ? r.bottom + 6 : Math.max(8, r.top - 6 - el.offsetHeight)) + 'px';
+}
+function closeMenu(silent) {
+  if (!state.menu) return;
+  const k = state.menu.key; state.menu = null;
+  const el = $('#menu'); el.hidden = true; el.innerHTML = '';
+  $$('.open[data-key]').forEach((a) => { a.classList.remove('open'); a.setAttribute('aria-expanded', 'false'); });
+  if (!silent) $(`[data-key="${k}"]`)?.focus({ preventScroll: true });
+}
+
+/* Morphing loading indicator */
+const MORPH = ['burst', 'cookie9', 'pentagon', 'oval', 'sunny', 'clover4', 'cookie12'];
+let loaderRAF = 0;
+function startLoaders() { if (!loaderRAF && !reduceMotion) loaderRAF = requestAnimationFrame(loaderLoop); }
+function loaderLoop(now) {
+  const els = document.querySelectorAll('[data-loader]');
+  if (!els.length) { loaderRAF = 0; return; }
+  {
+    const cycle = 700, k = Math.floor(now / cycle), u = (now % cycle) / cycle;
+    const e = Math.min(1.08, 1 - Math.exp(-7 * u) * Math.cos(11 * u));
+    const f1 = SHAPES[MORPH[k % MORPH.length]], f2 = SHAPES[MORPH[(k + 1) % MORPH.length]], rot = (now / 1000) * 2.4 + k * 0.6;
+    const cache = {};
+    els.forEach((el) => { const s = el.offsetWidth || 24; cache[s] = cache[s] || `path('${shapeD(f1, s, rot, f2, e)}')`; el.style.clipPath = cache[s]; });
+  }
+  loaderRAF = requestAnimationFrame(loaderLoop);
+}
+
+/* Snackbar */
+let snackTimer = 0, snackFn = null;
+/** action: optional { label, fn }, shown as a text button (e.g. Undo) */
+function snack(msg, action) {
+  const el = $('#snack');
+  snackFn = action?.fn || null;
+  el.innerHTML = `<span class="msg">${esc(msg)}</span>${action ? `<button class="snack-act" type="button"${act('snack-act')}>${esc(action.label)}</button>` : ''}<button class="icon-btn sm" type="button" style="color:inherit"${act('snack-close')} aria-label="Dismiss">${ic('close')}</button>`;
+  el.classList.add('show');
+  clearTimeout(snackTimer);
+  snackTimer = setTimeout(() => el.classList.remove('show'), action ? 6500 : 4200);
+}
+
+/* ---- 8. ACTIONS, EVENTS, BOOT -------------------------------------------------------------- */
+function setPrompt(text) {
+  state.idea.prompt = text;
+  ED.value = text; ED.focus();
+  patchComposer();
+}
+async function create() {
+  if (state.creating) return;
+  const I = state.idea;
+  if (!I.prompt.trim()) {
+    const c = $('#ai-box'); c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake');
+    ED.focus(); snack('Describe your video first, or use an example');
+    return;
+  }
+  const broken = $('.mention.broken', ED);
+  if (broken) {
+    const c = $('#ai-box'); c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake');
+    ED.focus(); snack(`@${broken.dataset.name} points to an image you removed. Click the mention to delete it.`);
+    return;
+  }
+  const r = resolved(I, I.prompt);
+  state.creating = true; closeMenu(true); patchComposer();
+  await new Promise((res) => setTimeout(res, 1600));
+  state.creating = false; patchComposer();
+  const extras = `${state.audio ? 'audio on' : 'no audio'}${state.refs.length ? `, ${state.refs.length} reference image${state.refs.length > 1 ? 's' : ''}` : ''}`;
+  snack(`Storyboard step isn't in this prototype yet · ${r.model.name}, ${r.ratio}, ${r.secs} sec, ${r.res}, ${extras}`);
+}
+function rerender() {
+  const sel = getSelection(), pos = document.activeElement === ED && sel.rangeCount ? [sel.anchorNode, sel.anchorOffset] : null;
+  const swap = () => { render(); if (pos) { ED.focus({ preventScroll: true }); try { sel.collapse(pos[0], pos[1]); } catch { edCaretEnd(); } } };
+  if (document.startViewTransition && !reduceMotion) document.startViewTransition(swap); else swap();
+}
+
+const ACTIONS = {
+  theme() {
+    state.theme = state.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = state.theme;
+    try { localStorage.setItem('qc_studio_theme', state.theme); } catch { /* storage unavailable */ }
+    homeSet('theme', state.theme);   // keep Home in step
+    rerender();
+  },
+  soon: (what) => snack(`${what} is not part of this prototype`),
+  'preview-toggle'() {
+    // Play if paused by the user or blocked by the browser, otherwise pause.
+    previewPaused = !(previewPaused || exVideo.paused);
+    setPreviewUi(previewPaused);
+    howVisibilityChanged();   // pause: the loop waits; play: the video step restarts from shot 1
+  },
+  'how-go'(id) { if (id !== howStep && !howBusy) goHow(id); },
+  'how-prev'() { const i = HOW.findIndex((t) => t.id === howStep); ACTIONS['how-go'](HOW[(i - 1 + HOW.length) % HOW.length].id); },
+  'how-next'() { const i = HOW.findIndex((t) => t.id === howStep); ACTIONS['how-go'](HOW[(i + 1) % HOW.length].id); },
+  'use-example'() { if (!state.creating) setPrompt(KEEPER.prompt); },
+  surprise() {
+    if (state.creating) return;
+    const others = EXAMPLES.map((_, i) => i).filter((i) => EXAMPLES[i].prompt !== state.idea.prompt);
+    const i = others[Math.floor(Math.random() * others.length)];
+    setPrompt(EXAMPLES[i].prompt);
+  },
+  'open-set'(field, el) { openMenu(field, el); },
+  pick(arg) {
+    const [field, raw] = arg.split('|'), v = field === 'duration' && raw !== 'auto' ? +raw : raw;
+    const key = state.menu?.key;
+    closeMenu(true);
+    state.idea[field] = v;
+    patchComposer();
+    $(`[data-key="${key}"]`)?.focus({ preventScroll: true });
+  },
+  create,
+  'sb-toggle'() { homeSet('sidebar', homeGet('sidebar', 'expanded') === 'collapsed' ? 'expanded' : 'collapsed'); applyRail(); },
+  'sb-support'() { snack('Support opens the help center in the full app. Nothing happens in this prototype.'); },
+  'sb-announce-x'() { homeSet('announce', 'dismissed'); $('#sbAnnounce')?.remove(); $('.sidebar input[name="sbTheme"]:checked')?.focus(); },
+  'browse-models'() { const b = $('[data-key="set:videoModel"]'); if (b && !b.disabled) { b.scrollIntoView({ block: 'nearest' }); openMenu('videoModel', b); } },
+  'snack-close'() { $('#snack').classList.remove('show'); },
+  'snack-act'() { const fn = snackFn; snackFn = null; $('#snack').classList.remove('show'); fn?.(); },
+  'toggle-audio'() {
+    state.audio = !state.audio;
+    patchComposer();
+    $('.set-row.toggle')?.focus({ preventScroll: true });
+  },
+  'add-ref'() { refPending = null; $('#ref-input')?.click(); },
+  'ref-mention'(id) { const r = refById(id); if (r && !state.creating) refInsert(r); },
+  'remove-ref'(id) { refRemove(id); ED.focus(); },
+};
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-act]');
+  if (state.menu && !e.target.closest('#menu') && !(t && t.dataset.key === state.menu.key)) closeMenu(true);
+  if (!t || t.disabled || t.getAttribute('aria-disabled') === 'true') return;
+  const fn = ACTIONS[t.dataset.act];
+  if (fn) { e.preventDefault(); fn(t.dataset.arg, t); }
+});
+document.addEventListener('input', (e) => {
+  const el = e.target;
+  if (el.id === 'prompt') { state.idea.prompt = el.value; autogrow(el); patchComposer(); return; }
+  if (el.id === 'dur-slider') {
+    const v = +el.value, f = (v - 4) / 56, wrap = el.parentElement, bubble = wrap.querySelector('.slider-bubble');
+    wrap.style.setProperty('--pct', f * 100 + '%');
+    if (bubble) { bubble.textContent = `${v}s`; bubble.style.left = `calc(10px + (100% - 20px) * ${f})`; }
+    $('#dur-val').textContent = `${v} sec`;
+    state.idea.duration = v;
+    patchComposer();
+    $$('#menu .mchip').forEach((c) => c.classList.toggle('sel', c.dataset.arg === `duration|${v}`));
+    $$('#menu .mi').forEach((c) => { if (c.dataset.arg === 'duration|auto') { c.classList.remove('sel'); c.setAttribute('aria-checked', 'false'); c.querySelector('.mi-check').innerHTML = ''; } });
+  }
+});
+document.addEventListener('keydown', (e) => {
+  const ae = document.activeElement;   // the upload box and image cards act as buttons
+  if ((e.key === 'Enter' || e.key === ' ') && ae === e.target && ae?.matches('.fu, .fu-file')) { e.preventDefault(); ae.click(); return; }
+  if (e.key === 'Escape' && state.menu) { closeMenu(); return; }
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && document.activeElement?.closest('#hn')) { e.preventDefault(); ACTIONS[e.key === 'ArrowLeft' ? 'how-prev' : 'how-next'](); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); if (!state.creating) create(); return; }
+  if (state.menu && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+    const items = $$('#menu [data-act]'), i = items.indexOf(document.activeElement);
+    e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+  }
+});
+/* Slider bubble shows only while dragging (as in index.html) */
+/* Reference images: file picker, drag and drop onto the panel, paste */
+document.addEventListener('change', (e) => {
+  if (e.target.name === 'sbTheme') { if (e.target.value !== state.theme) ACTIONS.theme(); return; }
+  if (e.target.id === 'sbNewUser') { homeSet('newUser', e.target.checked); const b = $('#sbProjects'); if (b) b.textContent = sbProjectCount() || ''; return; }
+  if (e.target.id !== 'ref-input') return;
+  const added = addRefFiles(e.target.files);
+  e.target.value = '';
+  const q = refPending; refPending = null;
+  if (q && added[0] && ED.contains(q.node)) {   // attached from the @ menu: mention it right there
+    const rg = document.createRange(); rg.setStart(q.node, q.start); rg.setEnd(q.node, Math.min(q.end, q.node.length));
+    refInsert(added[0], rg);
+  } else if (added.length) ED.focus();
+});
+/* Image cards: ← → move between them; Delete removes one */
+document.addEventListener('keydown', (e) => {
+  const b = e.target.closest?.('[data-ref-open]'); if (!b) return;
+  const all = $$('[data-ref-open]'), i = all.indexOf(b);
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); all[(i + (e.key === 'ArrowRight' ? 1 : -1) + all.length) % all.length].focus(); }
+  else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); refRemove(b.dataset.refOpen); ($$('[data-ref-open]')[Math.min(i, state.refs.length - 1)] || ED).focus(); }
+});
+const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+document.addEventListener('dragover', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  $('.panel')?.classList.toggle('drop-on', !!e.target.closest?.('.panel'));
+});
+document.addEventListener('dragleave', (e) => { if (!e.relatedTarget || !e.relatedTarget.closest?.('.panel')) $('.panel')?.classList.remove('drop-on'); });
+document.addEventListener('drop', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  $('.panel')?.classList.remove('drop-on');
+  if (e.target.closest?.('.panel') && !state.creating && addRefFiles(e.dataTransfer.files).length) ED.focus();
+});
+document.addEventListener('paste', (e) => {
+  const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith('image/'));
+  if (files.length && !state.creating) { e.preventDefault(); addRefFiles(files); }
+});
+document.addEventListener('pointerdown', (e) => { e.target.closest?.('.slider input')?.parentElement.classList.add('dragging'); });
+window.addEventListener('pointerup', () => $$('.slider.dragging').forEach((s) => s.classList.remove('dragging')));
+window.addEventListener('resize', bcFit);
+let menuRAF = 0;
+const queuePlaceMenu = () => { if (state.menu && !menuRAF) menuRAF = requestAnimationFrame(() => { menuRAF = 0; placeMenu(); }); };
+window.addEventListener('resize', queuePlaceMenu);
+document.addEventListener('scroll', queuePlaceMenu, { passive: true, capture: true });
+
+/* Example preview: step through the shots */
+/** Restart the shot clock so the first shot of a step gets its full time. */
+function restartShots() {
+  clearInterval(shotTimer);
+  shotTimer = setInterval(stepExample, SHOT_MS);
+}
+restartShots();
+
+/* Vertical word carousel */
+setInterval(() => {
+  const el = $('#rot');
+  if (!el || reduceMotion || document.hidden || el.dataset.animating) return;
+
+  el.dataset.animating = 'true';
+  rotIdx = (rotIdx + 1) % ROT_WORDS.length;
+
+  const oldWord = document.createElement('span');
+  oldWord.className = 'rot-word out';
+  oldWord.textContent = el.textContent;
+
+  const newWord = document.createElement('span');
+  newWord.className = 'rot-word in';
+  newWord.textContent = ROT_WORDS[rotIdx];
+
+  el.style.width = `${el.getBoundingClientRect().width}px`;
+  el.replaceChildren(oldWord, newWord);
+
+  const nextWidth = newWord.getBoundingClientRect().width;
+  requestAnimationFrame(() => {
+    el.style.width = `${nextWidth}px`;
+  });
+
+  setTimeout(() => {
+    if (!el.isConnected) return;
+    el.textContent = ROT_WORDS[rotIdx];
+    el.style.width = '';
+    delete el.dataset.animating;
+  }, 450);
+}, 2600);
+
+function boot() {
+  try {
+    const t = localStorage.getItem('qc_studio_theme'); if (t === 'light' || t === 'dark') state.theme = t;
+  } catch { /* storage unavailable */ }
+  document.documentElement.dataset.theme = state.theme;
+  render();
+  /* Fetch the example media once the page has settled */
+  if (!HOW_ONLY || HOW_ONLY === 'video') (window.requestIdleCallback || ((cb) => setTimeout(cb, 1200)))(primeExample, { timeout: 2500 });
+  if (matchMedia('(min-width: 900px)').matches) $('#prompt')?.focus({ preventScroll: true });
+}
+boot();
+</script>
+</body>
+</html>
